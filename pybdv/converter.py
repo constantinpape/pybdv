@@ -23,6 +23,9 @@ def copy_dataset(input_path, input_key, output_path, output_key,
 
         def copy_chunk(bb):
             data = ds_in[bb]
+            # skip empty chunks
+            if data.sum() == 0:
+                return
             ds_out[bb] = data
 
         for bb in blocking(shape, chunks):
