@@ -28,6 +28,7 @@ def copy_dataset(input_path, input_key, output_path, output_key,
                 return
             ds_out[bb] = data
 
+        # TODO use tdqm to measure progress
         for bb in blocking(shape, chunks):
             copy_chunk(bb)
 
@@ -50,7 +51,7 @@ def normalize_output_path(output_path):
 
 
 def make_scales(h5_path, downscale_factors, downscale_mode, ndim):
-    assert downscale_mode in ('nearest', 'interpolate')
+    assert downscale_mode in ('nearest', 'mean')
     assert all(isinstance(factor, (int, tuple, list)) for factor in downscale_factors)
     assert all(len(factor) == 3 for factor in downscale_factors
                if isinstance(factor, (tuple, list)))
@@ -97,7 +98,7 @@ def convert_to_bdv(input_path, input_key, output_path,
         assert input_key in f, "%s not in %s" % (input_key, input_path)
         shape = f[input_key].shape
         ndim = len(shape)
-    # TODO support arbitrary dimensions
+    # TODO support more dimensions
     assert ndim == 3, "Only support 3d"
     assert len(resolution) == ndim
 
