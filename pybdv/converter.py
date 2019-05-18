@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import h5py
+from tqdm import tqdm
 
 from .util import blocking
 from .metadata import write_h5_metadata, write_xml_metadata
@@ -28,8 +29,9 @@ def copy_dataset(input_path, input_key, output_path, output_key,
                 return
             ds_out[bb] = data
 
-        # TODO use tdqm to measure progress
-        for bb in blocking(shape, chunks):
+        print("Copy initial dataset from: %s:%s to %s:%s" % (input_path, input_key,
+                                                             output_path, output_key))
+        for bb in tqdm(blocking(shape, chunks)):
             copy_chunk(bb)
 
 
@@ -63,6 +65,7 @@ def make_scales(h5_path, downscale_factors, downscale_mode, ndim):
     for scale, factor in enumerate(factors):
         in_key = 't00000/s00/%i/cells' % scale
         out_key = 't00000/s00/%i/cells' % (scale + 1,)
+        print("Downsample scale %i / %i" % (scale + 1, len(factors)))
         downsample(h5_path, in_key, out_key, factor, downscale_mode)
 
     # add first level to factors

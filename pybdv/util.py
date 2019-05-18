@@ -1,6 +1,9 @@
 from itertools import product
 
 
+# TODO change this to a Generator class and provide a __len__ method, so that
+# we can get a full progress bar with tqdm
+# for generator class, see https://stackoverflow.com/questions/42983569/how-to-write-a-generator-class
 def blocking(shape, block_shape):
     """ Generator for nd blocking.
 

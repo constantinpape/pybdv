@@ -1,8 +1,9 @@
-import h5py
+from functools import partial
 import numpy as np
+import h5py
 from skimage.transform import resize
 from skimage.measure import block_reduce
-from functools import partial
+from tqdm import tqdm
 
 from .util import blocking, grow_bounding_box
 
@@ -71,6 +72,5 @@ def downsample(path, in_key, out_key, factor, mode):
             outp = downsample_function(inp, factor, out_shape)
             ds_out[bb] = outp[bb_local]
 
-        # TODO use tdqm to measure progress
-        for bb in blocking(sampled_shape, chunks):
+        for bb in tqdm(blocking(sampled_shape, chunks)):
             sample_chunk(bb)
