@@ -1,26 +1,41 @@
 import h5py
 import numpy as np
+from skimage.transform import resize
+from skimage.measure import block_reduce
+from functools import partial
 
-from .util import blocking
+from .util import blocking, grow_bounding_box
 
 
-def ds_nearest():
-    pass
+def ds_interpolate(data, scale_factor, out_shape, order):
+    out = resize(data, out_shape, order=order, mode='constant',
+                 anti_aliasing=order > 0)
+    return out
 
 
-def ds_mean():
-    pass
+def ds_block_reduce(data, scale_factor, out_shape, function):
+    out = block_reduce(data, tuple(scale_factor), function)
+    # crop if necessary
+    if out.shape != out_shape:
+        bb = tuple(slice(0, osh) for osh in out_shape)
+        out = out[bb]
+    return out
 
 
 def downsample(path, in_key, out_key, factor, mode):
     """ Downsample input hdf5 volume
     """
 
-    # TODO set halo for mean interpolation ?
+    # TODO allow:
+    # interpolation with different orders
+    # block reduce witth different fucntions
+    # fully custom downscale functions
     if mode == 'nearest':
-        downsample_function = ds_nearest
+        downsample_function = partial(ds_interpolate, order=0)
+        halo = None
     elif mode == 'mean':
-        downsample_function = ds_mean
+        downsample_function = partial(ds_block_reduce, function=np.mean)
+        halo = factor
     else:
         raise ValueError("Downsampling mode %s is not supported" % mode)
 
@@ -29,24 +44,32 @@ def downsample(path, in_key, out_key, factor, mode):
         shape = ds_in.shape
         chunks = ds_in.chunks
 
-        sampled_shape = tuple(sh // scale_factor for scale_factor in factor)
+        sampled_shape = tuple(sh // scale_factor for sh, scale_factor in zip(shape, factor))
         chunks = tuple(min(sh, ch) for sh, ch in zip(sampled_shape, ds_in.chunks))
 
         ds_out = f.create_dataset(out_key, shape=sampled_shape, chunks=chunks,
                                   compression='gzip', dtype=ds_in.dtype)
 
         def sample_chunk(bb):
+
+            # grow the bounding box if we have a halo
+            if halo is not None:
+                bb_grown, bb_local = grow_bounding_box(bb, halo, shape)
+            else:
+                bb_grown = bb
+                bb_local = np.s_[:]
+
             bb_up = tuple(slice(b.start * scale_factor, b.stop * scale_factor)
-                          for b, scale_factor in zip(bb, factor))
+                          for b, scale_factor in zip(bb_grown, factor))
             inp = ds_in[bb_up]
 
             # don't sample empty blocks
             if inp.sum() == 0:
                 return
 
-            out_shape = tuple(b.stop - b.start for b in bb)
-            outp = downsample_function(inp, scale_factor, out_shape)
-            ds_out[bb] = outp
+            out_shape = tuple(b.stop - b.start for b in bb_grown)
+            outp = downsample_function(inp, factor, out_shape)
+            ds_out[bb] = outp[bb_local]
 
         # TODO use tdqm to measure progress
         for bb in blocking(sampled_shape, chunks):

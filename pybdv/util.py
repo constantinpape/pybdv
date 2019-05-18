@@ -22,3 +22,12 @@ def blocking(shape, block_shape):
         yield tuple(slice(max(pos, minc), min(pos + bsha, maxc))
                     for pos, bsha, minc, maxc in zip(positions, block_shape,
                                                      min_coords, max_coords))
+
+
+def grow_bounding_box(bb, halo, shape):
+    assert len(bb) == len(halo) == len(shape)
+    bb_grown = tuple(slice(max(b.start - ha, 0), min(b.stop + ha, sh))
+                     for b, ha, sh in zip(bb, halo, shape))
+    bb_local = tuple(slice(b.start - bg.start, b.stop - bg.start)
+                     for bg, b in zip(bb_grown, bb))
+    return bb_grown, bb_local
