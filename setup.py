@@ -1,5 +1,5 @@
 from distutils.core import setup
-from cremi_tools import __version__
+from pybdv import __version__
 
 
 setup(name='pybdv',
