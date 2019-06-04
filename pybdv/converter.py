@@ -12,15 +12,16 @@ XML_EXTENSIONS = ['.xml']
 
 
 def copy_dataset(input_path, input_key, output_path, output_key,
-                 chunks=(64, 64, 64)):
+                 chunks=(64, 64, 64), dtype=None):
 
     with h5py.File(input_path, 'r') as f_in,\
             h5py.File(output_path) as f_out:
 
         ds_in = f_in[input_key]
         shape = ds_in.shape
+        out_dtype = ds_in.dtype if dtype is None else dtype
         ds_out = f_out.create_dataset(output_key, shape=shape, chunks=chunks,
-                                      compression='gzip', dtype=ds_in.dtype)
+                                      compression='gzip', dtype=out_dtype)
 
         def copy_chunk(bb):
             data = ds_in[bb]
@@ -78,7 +79,7 @@ def make_scales(h5_path, downscale_factors, downscale_mode, ndim):
 # TODO replace assertions with more meaningfull errors
 def convert_to_bdv(input_path, input_key, output_path,
                    downscale_factors=None, downscale_mode='nearest',
-                   resolution=[1., 1., 1.], unit='pixel'):
+                   resolution=[1., 1., 1.], unit='pixel', dtype=None):
     """ Convert hdf5 volume to BigDatViewer format.
 
     Optionally downscale the input volume and write it
@@ -94,6 +95,8 @@ def convert_to_bdv(input_path, input_key, output_path,
             Either 'nearest' or 'interpolate'.
         resolution(list or tuple): resolution of the data
         unit (str): unit of measurement
+        dtype (str or np.dtype): dtype of output dataset.
+            By default, the dtype of the input data is used.
     """
     # validate input data arguments
     assert os.path.exists(input_path), input_path
@@ -110,7 +113,7 @@ def convert_to_bdv(input_path, input_key, output_path,
     # copy the initial dataset
     base_key = 't00000/s00/0/cells'
     copy_dataset(input_path, input_key,
-                 h5_path, base_key)
+                 h5_path, base_key, dtype=dtype)
 
     # downsample if needed
     if downscale_factors is None:
