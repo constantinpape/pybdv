@@ -9,9 +9,10 @@ from .util import blocking, grow_bounding_box
 
 
 def ds_interpolate(data, scale_factor, out_shape, order):
+    dtype = data.dtype
     out = resize(data, out_shape, order=order, mode='constant',
-                 anti_aliasing=order > 0)
-    return out
+                 anti_aliasing=order > 0, preserve_range=True)
+    return out.astype(dtype)
 
 
 def ds_block_reduce(data, scale_factor, out_shape, function):
