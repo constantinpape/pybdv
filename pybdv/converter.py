@@ -3,18 +3,36 @@ import numpy as np
 import h5py
 from tqdm import tqdm
 
+try:
+    import z5py
+except ImportError:
+    z5py = None
+
 from .util import blocking
 from .metadata import write_h5_metadata, write_xml_metadata
 from .downsample import downsample
 
+Z5_EXTENSIONS = ['.n5', '.zr', '.zarr']
 HDF5_EXTENSIONS = ['.h5', '.hdf', '.hdf5']
 XML_EXTENSIONS = ['.xml']
+
+
+def file_reader(input_path, mode='r'):
+    ext = os.path.splitext(input_path)[1]
+    if ext.lower() in HDF5_EXTENSIONS:
+        return h5py.File(input_path, mode)
+    elif ext.lower() in Z5_EXTENSIONS:
+        if z5py is None:
+            raise RuntimeError("z5py was not found")
+        return z5py.File(input_path, mode)
+    else:
+        raise RuntimeError("Unknown file extensions %s" % ext)
 
 
 def copy_dataset(input_path, input_key, output_path, output_key,
                  chunks=(64, 64, 64), dtype=None):
 
-    with h5py.File(input_path, 'r') as f_in,\
+    with file_reader(input_path, 'r') as f_in,\
             h5py.File(output_path) as f_out:
 
         ds_in = f_in[input_key]
@@ -100,7 +118,7 @@ def convert_to_bdv(input_path, input_key, output_path,
     """
     # validate input data arguments
     assert os.path.exists(input_path), input_path
-    with h5py.File(input_path, 'r') as f:
+    with file_reader(input_path, 'r') as f:
         assert input_key in f, "%s not in %s" % (input_key, input_path)
         shape = f[input_key].shape
         ndim = len(shape)
