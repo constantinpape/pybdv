@@ -33,7 +33,8 @@ def matrix_to_transformation(matrix):
     """
     expected_last_row = np.array([0, 0, 0, 1])
     assert matrix.shape == (4, 4)
-    assert (matrix[:, 3] == expected_last_row).all()
+    assert (matrix[3, :] == expected_last_row).all(),\
+        "%s, %s" % (str(matrix[3, :]), str(expected_last_row))
 
     transformation = np.zeros(12)
     transformation[0:4] = matrix[0, :]
@@ -50,6 +51,8 @@ def matrix_to_transformation(matrix):
 
 
 def read_resolution_and_transformation(xml):
+    """ Read resolution and transformation vector from bdv xml.
+    """
     tree = ET.ElementTree(file=xml)
 
     for elem in tree.iter():
@@ -63,16 +66,23 @@ def read_resolution_and_transformation(xml):
         if elem.tag == 'ViewTransform':
             for child in elem:
                 transformation = child.text
+    transformation = transformation.split()
     transformation = [float(trafo) for trafo in transformation]
 
     return resolution, transformation
 
 
-def write_resolution_and_transformation(xml, resolution, transformation):
+def write_resolution_and_transformation(xml_in, xml_out,
+                                        resolution, transformation):
+    """ Write resolution and transformation vector to bdv xml.
+
+    Needs an input bdv xml and will copy everything except resolution
+    and transformation to the output xml.
+    """
     assert len(resolution) == 3
     assert len(transformation) == 12
 
-    tree = ET.ElementTree(file=xml)
+    tree = ET.ElementTree(file=xml_in)
 
     res_string = ' '.join([str(res) for res in resolution])
     for elem in tree.iter():
@@ -90,23 +100,34 @@ def write_resolution_and_transformation(xml, resolution, transformation):
     root = tree.getroot()
     indent_xml(root)
     tree = ET.ElementTree(root)
-    tree.write(xml)
+    tree.write(xml_out)
 
 
-def write_resolution_and_matrix(xml, resolution, matrix):
+def write_resolution_and_matrix(xml_in, xml_out, resolution, matrix):
+    """ Write resolution and affine matrix describing transformation to bdv xml.
+
+    Needs an input bdv xml and will copy everything except resolution
+    and transformation to the output xml.
+    """
     transformation = matrix_to_transformation(matrix)
-    write_resolution_and_transformation(xml, resolution, transformation)
+    write_resolution_and_transformation(xml_in, xml_out, resolution, transformation)
 
 
 def read_resolution_and_matrix(xml):
+    """ Read resolution and affine matrix describing transfomration from bdv xml.
+    """
     resolution, transformation = read_resolution_and_transformation(xml)
     matrix = transformation_to_matrix(transformation)
     return resolution, matrix
 
-
-# see this for affine matrix operations:
+# operations for affine transformation matrix
+# for details, see
 # https://math.stackexchange.com/questions/237369/given-this-transformation-matrix-how-do-i-decompose-it-into-translation-rotati
+
+
 def get_translation_from_matrix(matrix):
+    """ Extract translation matrix from affine matrix
+    """
     t = np.zeros((4, 4))
     for i in range(3):
         t[i, 3] = matrix[i, 3]
@@ -116,6 +137,8 @@ def get_translation_from_matrix(matrix):
 
 
 def get_scaling_from_matrix(matrix):
+    """ Extract scaling matrix from affine matrix
+    """
     s = np.zeros((4, 4))
     for i in range(3):
         s[i, i] = np.linalg.norm(matrix[:, i])
@@ -124,6 +147,8 @@ def get_scaling_from_matrix(matrix):
 
 
 def get_rotation_and_shear_from_matrix(matrix):
+    """ Extract rotation / shear matrix from affine matrix
+    """
     r = np.zeros((4, 4))
 
     # need scaling to compute rotation/shear
@@ -138,6 +163,8 @@ def get_rotation_and_shear_from_matrix(matrix):
 
 
 def decompose_matrix(matrix):
+    """ Decompose matrix into translation, scaling and rotation/shear
+    """
     t = get_translation_from_matrix(matrix)
     s = get_scaling_from_matrix(matrix)
     r = get_rotation_and_shear_from_matrix(matrix)
@@ -145,17 +172,21 @@ def decompose_matrix(matrix):
 
 
 def scale_matrix(matrix, scale_factor):
+    """ Scale affine transformation described by the transformation
+    by a scale_factor
+    """
     if isinstance(scale_factor, int):
         scale_factor = 3*[scale_factor]
     assert len(scale_factor) == 3, "%i" % len(scale_factor)
 
+    # decompose transformations
     t, s, r = decompose_matrix(matrix)
+
     # apply the scale factor to the scale_matrix
     s[0, 0] *= scale_factor[0]
     s[1, 1] *= scale_factor[1]
     s[2, 2] *= scale_factor[2]
 
-    # TODO is this the correct order ?
+    # compute new transformation
     matrix = np.matmul(np.matmul(t, s), r)
-
     return matrix
