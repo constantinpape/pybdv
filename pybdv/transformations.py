@@ -123,6 +123,8 @@ def read_resolution_and_matrix(xml):
 # operations for affine transformation matrix
 # for details, see
 # https://math.stackexchange.com/questions/237369/given-this-transformation-matrix-how-do-i-decompose-it-into-translation-rotati
+# TODO It should not be necessary to do the decomposition; should be enought to just build the new affine matrix and apply
+# before changing anything now, we need tests!
 
 
 def get_translation_from_matrix(matrix):
