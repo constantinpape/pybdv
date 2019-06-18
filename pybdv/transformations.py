@@ -163,7 +163,7 @@ def get_rotation_and_shear_from_matrix(matrix):
 
 
 def decompose_matrix(matrix):
-    """ Decompose matrix into translation, scaling and rotation/shear
+    """ Decompose matrix into translation, scaling and rotation/shear.
     """
     t = get_translation_from_matrix(matrix)
     s = get_scaling_from_matrix(matrix)
@@ -172,8 +172,8 @@ def decompose_matrix(matrix):
 
 
 def scale_matrix(matrix, scale_factor):
-    """ Scale affine transformation described by the transformation
-    by a scale_factor
+    """ Scale affine transformation described by the matrix
+    by a scale_factor.
     """
     if isinstance(scale_factor, int):
         scale_factor = 3*[scale_factor]
@@ -186,6 +186,72 @@ def scale_matrix(matrix, scale_factor):
     s[0, 0] *= scale_factor[0]
     s[1, 1] *= scale_factor[1]
     s[2, 2] *= scale_factor[2]
+
+    # compute new transformation
+    matrix = np.matmul(np.matmul(t, s), r)
+    return matrix
+
+
+def translate_matrix(matrix, translation):
+    """ Add translation to affine transformation described by the matrix.
+    """
+    if isinstance(translation, int):
+        translation = 3*[translation]
+    assert len(translation) == 3, "%i" % len(translation)
+
+    # decompose transformations
+    t, s, r = decompose_matrix(matrix)
+
+    # apply the scale factor to the scale_matrix
+    t[0, -1] += translation[0]
+    t[1, -1] += translation[1]
+    t[2, -1] += translation[2]
+
+    # compute new transformation
+    matrix = np.matmul(np.matmul(t, s), r)
+    return matrix
+
+
+# see https://en.wikipedia.org/wiki/Rotation_formalisms_in_three_dimensions
+def build_rotation_matrix(phi, theta, psi):
+    """ Rotation matrix from euler angles in degree.
+    """
+    phi, theta, psi = np.deg2rad([phi, theta, psi])
+    r = np.zeros((4, 4))
+
+    cos, sin = np.cos, np.sin
+
+    r[0, 0] = cos(theta) * cos(psi)
+    r[0, 1] = (- cos(phi) * sin(psi) + sin(phi) * sin(theta) * cos(psi))
+    r[0, 2] = sin(phi) * sin(psi) + cos(phi) * sin(theta) * cos(psi)
+
+    r[1, 0] = cos(theta) * sin(psi)
+    r[1, 1] = cos(phi) * cos(psi) + sin(phi) * sin(theta) * sin(psi)
+    r[1, 2] = (- sin(phi) * cos(psi) + cos(phi) * sin(theta) * sin(psi))
+
+    r[2, 0] = - sin(theta)
+    r[2, 1] = sin(phi) * cos(theta)
+    r[2, 2] = cos(phi) * cos(theta)
+
+    r[3, 3] = 1
+    return r
+
+
+def rotate_matrix(matrix, phi, theta, psi):
+    """ Rotate affine transformation described by the matrix.
+        The rotation is described by the three euler angles
+        phi, theta, psi (in degree).
+
+        This is untested!
+    """
+    # decompose transformations
+    t, s, r = decompose_matrix(matrix)
+
+    # build the rotation matrix
+    rot = build_rotation_matrix(phi, theta, psi)
+
+    # TODO is this the correct order of applying the trafos?
+    r = np.matmul(rot, r)
 
     # compute new transformation
     matrix = np.matmul(np.matmul(t, s), r)
