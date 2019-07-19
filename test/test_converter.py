@@ -20,7 +20,7 @@ class TestMakeBdv(unittest.TestCase):
     def test_simple(self):
         from pybdv import make_bdv
         shape = (100, 100, 100)
-        data = np.random.rand(*shape)
+        data = np.random.rand(*shape).astype('float32')
 
         out_path = './tmp/test.h5'
         make_bdv(data, out_path)
@@ -37,7 +37,7 @@ class TestMakeBdv(unittest.TestCase):
     # TODO test views with different registrations
     def test_multi_setup(self):
         from pybdv import make_bdv
-        shape = (256, 256, 256)
+        shape = (128, 128, 128)
         out_path = './tmp/test.h5'
 
         n_views = 2
@@ -46,7 +46,7 @@ class TestMakeBdv(unittest.TestCase):
         data_dict = {}
 
         for vid in range(n_views):
-            data = np.random.rand(*shape)
+            data = np.random.rand(*shape).astype('float32')
             make_bdv(data, out_path, setup_id=vid)
             data_dict[vid] = data
 
@@ -64,7 +64,7 @@ class TestMakeBdv(unittest.TestCase):
     def _test_ds(self, mode):
         from pybdv import make_bdv
         shape = (256, 256, 256)
-        data = np.random.rand(*shape)
+        data = np.random.rand(*shape).astype('float32')
 
         out_path = './tmp/test.h5'
         n_scales = 4

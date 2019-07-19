@@ -22,7 +22,8 @@ def indent_xml(elem, level=0):
             elem.tail = i
 
 
-# TODO support multiple timepoints and more custom attributes
+# TODO support multiple timepoints and different types of views
+# (right now, we only support multiple channels)
 def write_xml_metadata(xml_path, h5_path, unit, resolution,
                        offsets=(0., 0., 0.), setup_id=0,
                        setup_name=None):
@@ -40,9 +41,22 @@ def write_xml_metadata(xml_path, h5_path, unit, resolution,
 
     # check if we have an xml already
     if os.path.exists(xml_path):
-        # TODO validate this more, e.g. fir the c
         tree = ET.parse(xml_path)
         root = tree.getroot()
+
+        # load the sequence description
+        seqdesc = root.find('SequenceDescription')
+        # TODO validate image loader
+
+        # load the view descriptions
+        viewsets = seqdesc.find('ViewSetups')
+
+        # NOTE we only suport channel for now
+        # load the attributes setup
+        attrsets = viewsets.find('Attributes')
+
+        # load the registration decriptions
+        vregs = root.find('ViewRegistrations')
     else:
         # write top-level data
         root = ET.Element('SpimData')
@@ -51,21 +65,34 @@ def write_xml_metadata(xml_path, h5_path, unit, resolution,
         bp.set('type', 'relative')
         bp.text = '.'
 
+        # make the sequence description element
+        seqdesc = ET.SubElement(root, 'SequenceDescription')
+        # make the image loader
+        imgload = ET.SubElement(seqdesc, 'ImageLoader')
+        bdv_dtype = 'bdv.hdf5'
+        imgload.set('format', bdv_dtype)
+        el = ET.SubElement(imgload, 'hdf5')
+        el.set('type', 'relative')
+        el.text = os.path.basename(h5_path)
+
+        # make the view descriptions
+        viewsets = ET.SubElement(seqdesc, 'ViewSetups')
+        attrsets = ET.SubElement(viewsets, 'Attributes')
+        attrsets.set('name', 'channel')
+
+        # make the registration decriptions
+        vregs = ET.SubElement(root, 'ViewRegistrations')
+
+        # timepoint description
+        tpoints = ET.SubElement(seqdesc, 'Timepoints')
+        tpoints.set('type', 'range')
+        ET.SubElement(tpoints, 'first').text = str(0)
+        ET.SubElement(tpoints, 'last').text = str(nt - 1)
+
+
     # parse the resolution and offsets
     dz, dy, dx = resolution
     oz, oy, ox = offsets
-
-    # set h5 path
-    seqdesc = ET.SubElement(root, 'SequenceDescription')
-    imgload = ET.SubElement(seqdesc, 'ImageLoader')
-    bdv_dtype = 'bdv.hdf5'
-    imgload.set('format', bdv_dtype)
-    el = ET.SubElement(imgload, 'hdf5')
-    el.set('type', 'relative')
-    el.text = os.path.basename(h5_path)
-
-    # view descripyion
-    viewsets = ET.SubElement(seqdesc, 'ViewSetups')
 
     # setup for this view
     vs = ET.SubElement(viewsets, 'ViewSetup')
@@ -78,24 +105,23 @@ def write_xml_metadata(xml_path, h5_path, unit, resolution,
     ET.SubElement(vox, 'size').text = '{} {} {}'.format(dx, dy, dz)
     # attributes for this view setup.
     attrs = ET.SubElement(vs, 'attributes')
-    chan = ET.SubElement(attrs, 'channel')
-    ET.SubElement(chan, 'id').text = '0'
+    ET.SubElement(attrs, 'channel').text = str(setup_id)
 
-    # timepoint description
-    tpoints = ET.SubElement(seqdesc, 'Timepoints')
-    tpoints.set('type', 'range')
-    ET.SubElement(tpoints, 'first').text = str(0)
-    ET.SubElement(tpoints, 'last').text = str(nt - 1)
+    # add channel attribute
+    chan = ET.SubElement(attrsets, 'Channel')
+    ET.SubElement(chan, 'id').text = str(setup_id)
+    ET.SubElement(chan, 'name').text = str(setup_id)
 
     # TODO support different registrations here
-    vregs = ET.SubElement(root, 'ViewRegistrations')
     for t in range(nt):
         vreg = ET.SubElement(vregs, 'ViewRegistration')
         vreg.set('timepoint', str(t))
         vreg.set('setup', str(setup_id))
         vt = ET.SubElement(vreg, 'ViewTransform')
         vt.set('type', 'affine')
-        ET.SubElement(vt, 'affine').text = '{} 0.0 0.0 {} 0.0 {} 0.0 {} 0.0 0.0 {} {}'.format(dx, ox, dy, oy, dz, oz)
+        ET.SubElement(vt, 'affine').text = '{} 0.0 0.0 {} 0.0 {} 0.0 {} 0.0 0.0 {} {}'.format(dx, ox,
+                                                                                              dy, oy,
+                                                                                              dz, oz)
     indent_xml(root)
     tree = ET.ElementTree(root)
     tree.write(xml_path)
