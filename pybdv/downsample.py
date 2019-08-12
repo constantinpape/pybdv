@@ -38,6 +38,8 @@ def downsample(path, in_key, out_key, factor, mode):
     elif mode == 'mean':
         downsample_function = partial(ds_block_reduce, function=np.mean)
         halo = factor
+    elif mode == 'interpolate':
+        downsample_function = partial(ds_interpolate, order=3)
     else:
         raise ValueError("Downsampling mode %s is not supported" % mode)
 

@@ -17,6 +17,7 @@ HDF5_EXTENSIONS = ['.h5', '.hdf', '.hdf5']
 XML_EXTENSIONS = ['.xml']
 
 
+# TODO use elf.io.open_file instead
 def file_reader(input_path, mode='r'):
     ext = os.path.splitext(input_path)[1]
     if ext.lower() in HDF5_EXTENSIONS:
@@ -165,7 +166,7 @@ def make_bdv(data, output_path,
         downscale_factors (tuple or list): tuple or list of downscaling
             factors. Can be anisotropic. No downscaling by default.
         downscale_mode (str): mode used for downscaling.
-            Either 'nearest' or 'interpolate'.
+            Either 'nearest' or 'mean'.
         resolution(list or tuple): resolution of the data
         unit (str): unit of measurement
         setup_id (int): id of this view set-up (default: 0)
