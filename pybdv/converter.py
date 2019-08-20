@@ -73,7 +73,7 @@ def normalize_output_path(output_path):
 
 
 def make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id=0):
-    assert downscale_mode in ('nearest', 'mean')
+    assert downscale_mode in ('nearest', 'mean', 'max', 'min', 'interpolate')
     assert all(isinstance(factor, (int, tuple, list)) for factor in downscale_factors)
     assert all(len(factor) == 3 for factor in downscale_factors
                if isinstance(factor, (tuple, list)))
@@ -112,7 +112,7 @@ def convert_to_bdv(input_path, input_key, output_path,
         downscale_factors (tuple or list): tuple or list of downscaling
             factors. Can be anisotropic. No downscaling by default.
         downscale_mode (str): mode used for downscaling.
-            Either 'nearest' or 'mean'.
+            Can be 'mean', 'max', 'min', 'nearest' or 'interpolate' (default:'nerarest').
         resolution(list or tuple): resolution of the data
         unit (str): unit of measurement
         dtype (str or np.dtype): dtype of output dataset.
@@ -166,7 +166,7 @@ def make_bdv(data, output_path,
         downscale_factors (tuple or list): tuple or list of downscaling
             factors. Can be anisotropic. No downscaling by default.
         downscale_mode (str): mode used for downscaling.
-            Either 'nearest' or 'mean'.
+            Can be 'mean', 'max', 'min', 'nearest' or 'interpolate' (default:'nerarest').
         resolution(list or tuple): resolution of the data
         unit (str): unit of measurement
         setup_id (int): id of this view set-up (default: 0)

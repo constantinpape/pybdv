@@ -28,20 +28,19 @@ def downsample(path, in_key, out_key, factor, mode):
     """ Downsample input hdf5 volume
     """
 
-    # TODO allow:
-    # interpolation with different orders
-    # block reduce witth different fucntions
-    # fully custom downscale functions
     if mode == 'nearest':
         downsample_function = partial(ds_interpolate, order=0)
-        halo = None
     elif mode == 'mean':
         downsample_function = partial(ds_block_reduce, function=np.mean)
-        halo = factor
+    elif mode == 'max':
+        downsample_function = partial(ds_block_reduce, function=np.max)
+    elif mode == 'min':
+        downsample_function = partial(ds_block_reduce, function=np.min)
     elif mode == 'interpolate':
         downsample_function = partial(ds_interpolate, order=3)
     else:
         raise ValueError("Downsampling mode %s is not supported" % mode)
+    halo = factor
 
     with h5py.File(path) as f:
         ds_in = f[in_key]
