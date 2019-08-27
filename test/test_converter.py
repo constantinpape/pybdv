@@ -37,7 +37,7 @@ class TestMakeBdv(unittest.TestCase):
     # TODO test views with different registrations
     def test_multi_setup(self):
         from pybdv import make_bdv
-        shape = (128, 128, 128)
+        shape = (64,) * 3
         out_path = './tmp/test.h5'
 
         n_views = 2
@@ -50,14 +50,20 @@ class TestMakeBdv(unittest.TestCase):
             make_bdv(data, out_path, setup_id=vid)
             data_dict[vid] = data
 
+        # check implicit setup id
+        data = np.random.rand(*shape).astype('float32')
+        make_bdv(data, out_path)
+        data_dict[n_views] = data
+
         with h5py.File(out_path, 'r') as f:
-            for vid in range(n_views):
+            for vid in range(n_views + 1):
                 expected_key = 't00000/s%02i/0/cells' % vid
                 self.assertTrue(expected_key in f)
 
                 exp_data = data_dict[vid]
                 data = f[expected_key][:]
                 self.assertTrue(np.allclose(data, exp_data))
+
 
         # TODO check the xml metadata
 
