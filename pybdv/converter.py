@@ -1,4 +1,5 @@
 import os
+import sys
 import numpy as np
 import h5py
 from tqdm import tqdm
@@ -28,6 +29,24 @@ def file_reader(input_path, mode='r'):
         return z5py.File(input_path, mode)
     else:
         raise RuntimeError("Unknown file extensions %s" % ext)
+
+
+def handle_setup_id(setup_id, h5_path):
+    if os.path.exists(h5_path):
+        with h5py.File(h5_path, 'r') as f:
+            setup_ids = list(f['t00000'].keys())
+            setup_ids = [int(sid[1:]) for sid in setup_ids]
+    else:
+        setup_ids = [-1]
+    if setup_id is None:
+        setup_id = max(setup_ids) + 1
+    else:
+        if setup_id in setup_ids:
+            overwrite = input("Setup-id %i is alread present. Do you want to over-write it? y / [n]:")
+            if overwrite != 'y':
+                sys.exit(0)
+    assert setup_id < 100, "Only up to 100 set-ups are supported"
+    return setup_id
 
 
 def copy_dataset(input_path, input_key, output_path, output_key,
@@ -72,7 +91,7 @@ def normalize_output_path(output_path):
     return h5_path, xml_path
 
 
-def make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id=0):
+def make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id):
     assert downscale_mode in ('nearest', 'mean', 'max', 'min', 'interpolate')
     assert all(isinstance(factor, (int, tuple, list)) for factor in downscale_factors)
     assert all(len(factor) == 3 for factor in downscale_factors
@@ -94,12 +113,12 @@ def make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id=0):
 
 
 # TODO expose 'offsets' parameter
-# TODO support multiple time points and set-ups
+# TODO support multiple time-points
 # TODO replace assertions with more meaningfull errors
 def convert_to_bdv(input_path, input_key, output_path,
                    downscale_factors=None, downscale_mode='nearest',
                    resolution=[1., 1., 1.], unit='pixel', dtype=None,
-                   setup_id=0, setup_name=None):
+                   setup_id=None, setup_name=None):
     """ Convert hdf5 volume to BigDatViewer format.
 
     Optionally downscale the input volume and write it
@@ -117,7 +136,7 @@ def convert_to_bdv(input_path, input_key, output_path,
         unit (str): unit of measurement
         dtype (str or np.dtype): dtype of output dataset.
             By default, the dtype of the input data is used.
-        setup_id (int): id of this view set-up (default: 0)
+        setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
         setup_name (str): name of this view set-up (default: None)
     """
     # validate input data arguments
@@ -126,12 +145,11 @@ def convert_to_bdv(input_path, input_key, output_path,
         assert input_key in f, "%s not in %s" % (input_key, input_path)
         shape = f[input_key].shape
         ndim = len(shape)
-    # TODO support more dimensions
     assert ndim == 3, "Only support 3d"
     assert len(resolution) == ndim
-    assert setup_id < 100, "Only up to 100 set-ups are supported"
 
     h5_path, xml_path = normalize_output_path(output_path)
+    setup_id = handle_setup_id(setup_id, h5_path)
 
     # copy the initial dataset
     base_key = 't00000/s%02i/0/cells' % setup_id
@@ -143,7 +161,7 @@ def convert_to_bdv(input_path, input_key, output_path,
         # set single level downscale factor
         factors = [[1, 1, 1]]
     else:
-        factors = make_scales(h5_path, downscale_factors, downscale_mode, ndim)
+        factors = make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id)
 
     # write bdv metadata
     write_h5_metadata(h5_path, factors, setup_id)
@@ -155,7 +173,7 @@ def convert_to_bdv(input_path, input_key, output_path,
 def make_bdv(data, output_path,
              downscale_factors=None, downscale_mode='nearest',
              resolution=[1., 1., 1.], unit='pixel',
-             setup_id=0, setup_name=None):
+             setup_id=None, setup_name=None):
     """ Write data to BigDatViewer format.
 
     Optionally downscale the input data to BigDataViewer scale pyramid.
@@ -169,18 +187,17 @@ def make_bdv(data, output_path,
             Can be 'mean', 'max', 'min', 'nearest' or 'interpolate' (default:'nerarest').
         resolution(list or tuple): resolution of the data
         unit (str): unit of measurement
-        setup_id (int): id of this view set-up (default: 0)
+        setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
         setup_name (str): name of this view set-up (default: None)
     """
     # validate input data arguments
     assert isinstance(data, np.ndarray), "Input needs to be numpy array"
     ndim = data.ndim
-    # TODO support 4d for channels
     assert ndim == 3, "Only support 3d"
     assert len(resolution) == ndim
-    assert setup_id < 100, "Only up to 100 set-ups are supported"
 
     h5_path, xml_path = normalize_output_path(output_path)
+    setup_id = handle_setup_id(setup_id, h5_path)
 
     # write initial dataset
     base_key = 't00000/s%02i/0/cells' % setup_id

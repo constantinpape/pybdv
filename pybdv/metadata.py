@@ -89,7 +89,6 @@ def write_xml_metadata(xml_path, h5_path, unit, resolution,
         ET.SubElement(tpoints, 'first').text = str(0)
         ET.SubElement(tpoints, 'last').text = str(nt - 1)
 
-
     # parse the resolution and offsets
     dz, dy, dx = resolution
     oz, oy, ox = offsets
