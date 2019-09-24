@@ -19,9 +19,8 @@ setup(
     author='Constantin Pape',
     install_requires=requires,
     url='https://github.com/constantinpape/pybdv',
-    license='MIT'
-    # we should install `pybdv_converter`, so I am leaving this for reference
-    # entry_points={
-    #     "console_scripts": ["view_container = heimdall.scripts.view_container:main"]
-    # },
+    license='MIT',
+    entry_points={
+        "console_scripts": ["convert_to_bdv = pybdv.scripts.bdv_converter:main"]
+    },
 )

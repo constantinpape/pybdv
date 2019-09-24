@@ -128,8 +128,9 @@ def convert_to_bdv(input_path, input_key, output_path,
         input_path (str): path to hdf5 input volume
         input_key (str): path in hdf5 input file
         output_path (str): output path to bdv file
-        downscale_factors (tuple or list): tuple or list of downscaling
-            factors. Can be anisotropic. No downscaling by default.
+        downscale_factors (tuple or list): factors tused to create multi-scale pyramid.
+            The factors need to be specified per dimension and are interpreted relative to the previous factor.
+            If no argument is passed, pybdv does not create a multi-scale pyramid. (default: None)
         downscale_mode (str): mode used for downscaling.
             Can be 'mean', 'max', 'min', 'nearest' or 'interpolate' (default:'nerarest').
         resolution(list or tuple): resolution of the data
@@ -181,8 +182,9 @@ def make_bdv(data, output_path,
     Args:
         data (np.ndarray): input data
         output_path (str): output path to bdv file
-        downscale_factors (tuple or list): tuple or list of downscaling
-            factors. Can be anisotropic. No downscaling by default.
+        downscale_factors (tuple or list): factors tused to create multi-scale pyramid.
+            The factors need to be specified per dimension and are interpreted relative to the previous factor.
+            If no argument is passed, pybdv does not create a multi-scale pyramid. (default: None)
         downscale_mode (str): mode used for downscaling.
             Can be 'mean', 'max', 'min', 'nearest' or 'interpolate' (default:'nerarest').
         resolution(list or tuple): resolution of the data
