@@ -6,7 +6,6 @@ import numpy as np
 import h5py
 
 
-# TODO expand tests
 class TestMakeBdv(unittest.TestCase):
     def setUp(self):
         os.makedirs('./tmp', exist_ok=True)
