@@ -21,6 +21,6 @@ setup(
     url='https://github.com/constantinpape/pybdv',
     license='MIT',
     entry_points={
-        "console_scripts": ["convert_to_bdv = pybdv.scripts.bdv_converter:main"]
+        "console_scripts": ["convert_to_bdv = pybdv.scripts.pybdv_converter:main"]
     },
 )

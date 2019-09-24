@@ -7,7 +7,7 @@ import numpy as np
 import h5py
 
 
-class TestMakeBdv(unittest.TestCase):
+class TestConvertToBdv(unittest.TestCase):
     in_path = './tmp/in.h5'
     out_path = './tmp/out.h5'
 
