@@ -124,7 +124,7 @@ def make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id):
 def convert_to_bdv(input_path, input_key, output_path,
                    downscale_factors=None, downscale_mode='nearest',
                    resolution=[1., 1., 1.], unit='pixel',
-                   setup_id=None, setup_name=None, convert_dtype=False):
+                   setup_id=None, setup_name=None, convert_dtype=True):
     """ Convert hdf5 volume to BigDatViewer format.
 
     Optionally downscale the input volume and write it
@@ -144,7 +144,7 @@ def convert_to_bdv(input_path, input_key, output_path,
         setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
         setup_name (str): name of this view set-up (default: None)
         convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
-            This will map unsigned types to signed and fail if the value range is too large. (default: False)
+            This will map unsigned types to signed and fail if the value range is too large. (default: True)
     """
     # validate input data arguments
     assert os.path.exists(input_path), input_path
@@ -180,7 +180,7 @@ def convert_to_bdv(input_path, input_key, output_path,
 def make_bdv(data, output_path,
              downscale_factors=None, downscale_mode='nearest',
              resolution=[1., 1., 1.], unit='pixel',
-             setup_id=None, setup_name=None, convert_dtype=False):
+             setup_id=None, setup_name=None, convert_dtype=True):
     """ Write data to BigDatViewer format.
 
     Optionally downscale the input data to BigDataViewer scale pyramid.
@@ -198,7 +198,7 @@ def make_bdv(data, output_path,
         setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
         setup_name (str): name of this view set-up (default: None)
         convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
-            This will map unsigned types to signed and fail if the value range is too large. (default: False)
+            This will map unsigned types to signed and fail if the value range is too large. (default: True)
     """
     # validate input data arguments
     assert isinstance(data, np.ndarray), "Input needs to be numpy array"
