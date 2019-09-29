@@ -11,6 +11,9 @@ requires = [
     "tqdm"
 ]
 
+extras = {"elf": "elf"}
+extras["all"] = list(itertools.chain.from_iterable(extras.values()))
+
 setup(
     name='pybdv',
     packages=find_packages(exclude=['test']),
@@ -18,6 +21,7 @@ setup(
     description='Python tools for BigDataViewer',
     author='Constantin Pape',
     install_requires=requires,
+    extras_require=extras,
     url='https://github.com/constantinpape/pybdv',
     license='MIT',
     entry_points={

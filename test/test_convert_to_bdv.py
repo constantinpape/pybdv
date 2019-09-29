@@ -13,7 +13,7 @@ class TestConvertToBdv(unittest.TestCase):
 
     def setUp(self):
         os.makedirs('./tmp', exist_ok=True)
-        with h5py.File(self.in_path) as f:
+        with h5py.File(self.in_path, 'a') as f:
             f.create_dataset('data', data=np.random.rand(64, 64, 64), chunks=(32, 32, 32))
 
     def tearDown(self):

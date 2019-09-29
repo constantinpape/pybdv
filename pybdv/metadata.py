@@ -153,6 +153,6 @@ def write_h5_metadata(path, scale_factors, setup_id=0):
 
     scales = np.array(scales).astype('float32')
     chunks = np.array(chunks).astype('int')
-    with h5py.File(path) as f:
+    with h5py.File(path, 'a') as f:
         f.create_dataset('s%02i/resolutions' % setup_id, data=scales)
         f.create_dataset('s%02i/subdivisions' % setup_id, data=chunks)

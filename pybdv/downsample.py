@@ -42,7 +42,7 @@ def downsample(path, in_key, out_key, factor, mode):
         raise ValueError("Downsampling mode %s is not supported" % mode)
     halo = factor
 
-    with h5py.File(path) as f:
+    with h5py.File(path, 'a') as f:
         ds_in = f[in_key]
         shape = ds_in.shape
         chunks = ds_in.chunks

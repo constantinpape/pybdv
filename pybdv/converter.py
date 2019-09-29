@@ -4,32 +4,23 @@ import numpy as np
 import h5py
 from tqdm import tqdm
 
-try:
-    import z5py
-except ImportError:
-    z5py = None
-
 from .util import blocking
 from .metadata import write_h5_metadata, write_xml_metadata
 from .downsample import downsample
 from .dtypes import convert_to_bdv_dtype, get_new_dtype
 
-Z5_EXTENSIONS = ['.n5', '.zr', '.zarr']
+# we use elf.io.open_file in order to load more file formats,
+# if it is available.
+try:
+    from elf.io import open_file
+except ImportError:
+    # only supprt h5py if we don't have elf
+    def open_file(input_path, mode='a'):
+        return h5py.File(input_path, mode)
+
+
 HDF5_EXTENSIONS = ['.h5', '.hdf', '.hdf5']
 XML_EXTENSIONS = ['.xml']
-
-
-# TODO use elf.io.open_file instead
-def file_reader(input_path, mode='r'):
-    ext = os.path.splitext(input_path)[1]
-    if ext.lower() in HDF5_EXTENSIONS:
-        return h5py.File(input_path, mode)
-    elif ext.lower() in Z5_EXTENSIONS:
-        if z5py is None:
-            raise RuntimeError("z5py was not found")
-        return z5py.File(input_path, mode)
-    else:
-        raise RuntimeError("Unknown file extensions %s" % ext)
 
 
 def handle_setup_id(setup_id, h5_path):
@@ -52,8 +43,8 @@ def handle_setup_id(setup_id, h5_path):
 
 def copy_dataset(input_path, input_key, output_path, output_key, convert_dtype=False):
 
-    with file_reader(input_path, 'r') as f_in,\
-            h5py.File(output_path) as f_out:
+    with open_file(input_path, 'r') as f_in,\
+            h5py.File(output_path, 'a') as f_out:
 
         ds_in = f_in[input_key]
         shape = ds_in.shape
@@ -148,7 +139,7 @@ def convert_to_bdv(input_path, input_key, output_path,
     """
     # validate input data arguments
     assert os.path.exists(input_path), input_path
-    with file_reader(input_path, 'r') as f:
+    with open_file(input_path, 'r') as f:
         assert input_key in f, "%s not in %s" % (input_key, input_path)
         shape = f[input_key].shape
         ndim = len(shape)
@@ -214,7 +205,7 @@ def make_bdv(data, output_path,
 
     # write initial dataset
     base_key = 't00000/s%02i/0/cells' % setup_id
-    with h5py.File(h5_path) as f:
+    with h5py.File(h5_path, 'a') as f:
         f.create_dataset(base_key, data=data, compression='gzip')
 
     # downsample if needed
