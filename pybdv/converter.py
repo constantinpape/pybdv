@@ -12,6 +12,7 @@ except ImportError:
 from .util import blocking
 from .metadata import write_h5_metadata, write_xml_metadata
 from .downsample import downsample
+from .dtypes import convert_to_bdv_dtype, get_new_dtype
 
 Z5_EXTENSIONS = ['.n5', '.zr', '.zarr']
 HDF5_EXTENSIONS = ['.h5', '.hdf', '.hdf5']
@@ -49,23 +50,28 @@ def handle_setup_id(setup_id, h5_path):
     return setup_id
 
 
-def copy_dataset(input_path, input_key, output_path, output_key,
-                 chunks=(64, 64, 64), dtype=None):
+def copy_dataset(input_path, input_key, output_path, output_key, convert_dtype=False):
 
     with file_reader(input_path, 'r') as f_in,\
             h5py.File(output_path) as f_out:
 
         ds_in = f_in[input_key]
         shape = ds_in.shape
-        out_dtype = ds_in.dtype if dtype is None else dtype
-        ds_out = f_out.create_dataset(output_key, shape=shape, chunks=chunks,
+        if convert_dtype:
+            out_dtype = get_new_dtype(ds_in.dtype)
+        else:
+            out_dtype = ds_in.dtype
+        ds_out = f_out.create_dataset(output_key, shape=shape, chunks=True,
                                       compression='gzip', dtype=out_dtype)
+        chunks = ds_out.chunks
 
         def copy_chunk(bb):
             data = ds_in[bb]
             # skip empty chunks
             if data.sum() == 0:
                 return
+            if convert_dtype:
+                data = convert_to_bdv_dtype(data)
             ds_out[bb] = data
 
         print("Copy initial dataset from: %s:%s to %s:%s" % (input_path, input_key,
@@ -117,8 +123,8 @@ def make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id):
 # TODO replace assertions with more meaningfull errors
 def convert_to_bdv(input_path, input_key, output_path,
                    downscale_factors=None, downscale_mode='nearest',
-                   resolution=[1., 1., 1.], unit='pixel', dtype=None,
-                   setup_id=None, setup_name=None):
+                   resolution=[1., 1., 1.], unit='pixel',
+                   setup_id=None, setup_name=None, convert_dtype=True):
     """ Convert hdf5 volume to BigDatViewer format.
 
     Optionally downscale the input volume and write it
@@ -135,10 +141,10 @@ def convert_to_bdv(input_path, input_key, output_path,
             Can be 'mean', 'max', 'min', 'nearest' or 'interpolate' (default:'nerarest').
         resolution(list or tuple): resolution of the data
         unit (str): unit of measurement
-        dtype (str or np.dtype): dtype of output dataset.
-            By default, the dtype of the input data is used.
         setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
         setup_name (str): name of this view set-up (default: None)
+        convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
+            This will map unsigned types to signed and fail if the value range is too large. (default: True)
     """
     # validate input data arguments
     assert os.path.exists(input_path), input_path
@@ -155,7 +161,7 @@ def convert_to_bdv(input_path, input_key, output_path,
     # copy the initial dataset
     base_key = 't00000/s%02i/0/cells' % setup_id
     copy_dataset(input_path, input_key,
-                 h5_path, base_key, dtype=dtype)
+                 h5_path, base_key, convert_dtype=convert_dtype)
 
     # downsample if needed
     if downscale_factors is None:
@@ -174,7 +180,7 @@ def convert_to_bdv(input_path, input_key, output_path,
 def make_bdv(data, output_path,
              downscale_factors=None, downscale_mode='nearest',
              resolution=[1., 1., 1.], unit='pixel',
-             setup_id=None, setup_name=None):
+             setup_id=None, setup_name=None, convert_dtype=True):
     """ Write data to BigDatViewer format.
 
     Optionally downscale the input data to BigDataViewer scale pyramid.
@@ -191,6 +197,8 @@ def make_bdv(data, output_path,
         unit (str): unit of measurement
         setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
         setup_name (str): name of this view set-up (default: None)
+        convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
+            This will map unsigned types to signed and fail if the value range is too large. (default: True)
     """
     # validate input data arguments
     assert isinstance(data, np.ndarray), "Input needs to be numpy array"
@@ -200,6 +208,9 @@ def make_bdv(data, output_path,
 
     h5_path, xml_path = normalize_output_path(output_path)
     setup_id = handle_setup_id(setup_id, h5_path)
+
+    if convert_dtype:
+        data = convert_to_bdv_dtype(data)
 
     # write initial dataset
     base_key = 't00000/s%02i/0/cells' % setup_id

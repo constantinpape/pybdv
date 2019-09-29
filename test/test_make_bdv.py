@@ -103,6 +103,22 @@ class TestMakeBdv(unittest.TestCase):
         shape = (256,) * 3
         self._test_ds(shape, 'mean')
 
+    def test_dtype(self):
+        from pybdv import make_bdv
+        shape = (128,) * 3
+
+        val = np.iinfo('uint16').max + 1
+        data = np.full(shape, val, dtype='uint32')
+
+        out_path = './tmp/test.h5'
+        make_bdv(data, out_path, convert_dtype=False)
+        with h5py.File(out_path, 'r') as f:
+            d = f['t00000/s00/0/cells'][:]
+        self.assertTrue(np.array_equal(d, data))
+
+        with self.assertRaises(RuntimeError):
+            make_bdv(d, './tmp.test2.h5', convert_dtype=True)
+
     # 2d is not supported yet
     @unittest.skip
     def test_ds_nearest_2d(self):
