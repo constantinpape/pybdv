@@ -31,9 +31,9 @@ requirements:
     {% for dep in data['install_requires'] %}
     - {{ dep.lower() }}
     {% endfor %}
-    {% for dep in data['extras_require']['all'] %}
-    - {{ dep.lower() }}
-    {% endfor %}
+    # {% for dep in data['extras_require']['all'] %}
+    # - {{ dep.lower() }}
+    # {% endfor %}
 
 test:
   imports:
