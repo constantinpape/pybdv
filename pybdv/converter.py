@@ -4,7 +4,7 @@ import numpy as np
 import h5py
 from tqdm import tqdm
 
-from .util import blocking
+from .util import blocking, get_nblocks
 from .metadata import write_h5_metadata, write_xml_metadata
 from .downsample import downsample
 from .dtypes import convert_to_bdv_dtype, get_new_dtype
@@ -65,9 +65,10 @@ def copy_dataset(input_path, input_key, output_path, output_key, convert_dtype=F
                 data = convert_to_bdv_dtype(data)
             ds_out[bb] = data
 
+        n_blocks = get_nblocks(shape, chunks)
         print("Copy initial dataset from: %s:%s to %s:%s" % (input_path, input_key,
                                                              output_path, output_key))
-        for bb in tqdm(blocking(shape, chunks)):
+        for bb in tqdm(blocking(shape, chunks), total=n_blocks):
             copy_chunk(bb)
 
 

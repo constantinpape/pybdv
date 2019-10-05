@@ -5,7 +5,7 @@ from skimage.transform import resize
 from skimage.measure import block_reduce
 from tqdm import tqdm
 
-from .util import blocking, grow_bounding_box
+from .util import blocking, grow_bounding_box, get_nblocks
 
 
 def ds_interpolate(data, scale_factor, out_shape, order):
@@ -75,5 +75,6 @@ def downsample(path, in_key, out_key, factor, mode):
             outp = downsample_function(inp, factor, out_shape)
             ds_out[bb] = outp[bb_local]
 
-        for bb in tqdm(blocking(sampled_shape, chunks)):
+        n_blocks = get_nblocks(sampled_shape, chunks)
+        for bb in tqdm(blocking(sampled_shape, chunks), total=n_blocks):
             sample_chunk(bb)
