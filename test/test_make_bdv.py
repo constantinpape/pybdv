@@ -93,7 +93,8 @@ class TestMakeBdv(unittest.TestCase):
                 self.assertTrue(key in f)
                 ds = f[key]
                 self.assertEqual(ds.shape, exp_shape)
-                exp_shape = tuple(sh // sf for sh, sf in zip(exp_shape, downscale_factors[scale]))
+                exp_shape = tuple(sh // sf
+                                  for sh, sf in zip(exp_shape, downscale_factors[scale]))
 
     def test_ds_nearest_3d(self):
         shape = (256,) * 3
@@ -118,6 +119,19 @@ class TestMakeBdv(unittest.TestCase):
 
         with self.assertRaises(RuntimeError):
             make_bdv(d, './tmp.test2.h5', convert_dtype=True)
+
+    def test_custom_chunks(self):
+        from pybdv import make_bdv
+        shape = (128,) * 3
+        chunks = (64,) * 3
+
+        out_path = './tmp/test.h5'
+        data = np.random.rand(*shape)
+        make_bdv(data, out_path, chunks=chunks)
+
+        with h5py.File(out_path, 'r') as f:
+            d = f['t00000/s00/0/cells'][:]
+        self.assertTrue(np.allclose(d, data))
 
     # 2d is not supported yet
     @unittest.skip

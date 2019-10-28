@@ -41,20 +41,29 @@ def handle_setup_id(setup_id, h5_path):
     return setup_id
 
 
-def copy_dataset(input_path, input_key, output_path, output_key, convert_dtype=False):
+def copy_dataset(input_path, input_key, output_path, output_key,
+                 convert_dtype=False, chunks=None):
 
-    with open_file(input_path, 'r') as f_in,\
-            h5py.File(output_path, 'a') as f_out:
+    with open_file(input_path, 'r') as f_in, h5py.File(output_path, 'a') as f_out:
 
         ds_in = f_in[input_key]
         shape = ds_in.shape
+
+        # validate chunks
+        if chunks is None:
+            chunks_ = True
+        else:
+            chunks_ = tuple(min(ch, sh) for sh, ch in zip(shape, chunks))
+
         if convert_dtype:
             out_dtype = get_new_dtype(ds_in.dtype)
         else:
             out_dtype = ds_in.dtype
-        ds_out = f_out.create_dataset(output_key, shape=shape, chunks=True,
+
+        # create the output dataset and get the effective chunks
+        ds_out = f_out.create_dataset(output_key, shape=shape, chunks=chunks_,
                                       compression='gzip', dtype=out_dtype)
-        chunks = ds_out.chunks
+        ds_chunks = ds_out.chunks
 
         def copy_chunk(bb):
             data = ds_in[bb]
@@ -65,10 +74,10 @@ def copy_dataset(input_path, input_key, output_path, output_key, convert_dtype=F
                 data = convert_to_bdv_dtype(data)
             ds_out[bb] = data
 
-        n_blocks = get_nblocks(shape, chunks)
+        n_blocks = get_nblocks(shape, ds_chunks)
         print("Copy initial dataset from: %s:%s to %s:%s" % (input_path, input_key,
                                                              output_path, output_key))
-        for bb in tqdm(blocking(shape, chunks), total=n_blocks):
+        for bb in tqdm(blocking(shape, ds_chunks), total=n_blocks):
             copy_chunk(bb)
 
 
@@ -89,7 +98,7 @@ def normalize_output_path(output_path):
     return h5_path, xml_path
 
 
-def make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id):
+def make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id, chunks=None):
     assert downscale_mode in ('nearest', 'mean', 'max', 'min', 'interpolate')
     assert all(isinstance(factor, (int, tuple, list)) for factor in downscale_factors)
     assert all(len(factor) == 3 for factor in downscale_factors
@@ -116,7 +125,8 @@ def make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id):
 def convert_to_bdv(input_path, input_key, output_path,
                    downscale_factors=None, downscale_mode='nearest',
                    resolution=[1., 1., 1.], unit='pixel',
-                   setup_id=None, setup_name=None, convert_dtype=True):
+                   setup_id=None, setup_name=None, convert_dtype=True,
+                   chunks=None):
     """ Convert hdf5 volume to BigDatViewer format.
 
     Optionally downscale the input volume and write it
@@ -137,6 +147,8 @@ def convert_to_bdv(input_path, input_key, output_path,
         setup_name (str): name of this view set-up (default: None)
         convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
             This will map unsigned types to signed and fail if the value range is too large. (default: True)
+        chunks (tuple): chunks for the output dataset.
+            By default the h5py auto chunks are used (default: None)
     """
     # validate input data arguments
     assert os.path.exists(input_path), input_path
@@ -153,7 +165,8 @@ def convert_to_bdv(input_path, input_key, output_path,
     # copy the initial dataset
     base_key = 't00000/s%02i/0/cells' % setup_id
     copy_dataset(input_path, input_key,
-                 h5_path, base_key, convert_dtype=convert_dtype)
+                 h5_path, base_key, convert_dtype=convert_dtype,
+                 chunks=chunks)
 
     # downsample if needed
     if downscale_factors is None:
@@ -172,7 +185,8 @@ def convert_to_bdv(input_path, input_key, output_path,
 def make_bdv(data, output_path,
              downscale_factors=None, downscale_mode='nearest',
              resolution=[1., 1., 1.], unit='pixel',
-             setup_id=None, setup_name=None, convert_dtype=True):
+             setup_id=None, setup_name=None, convert_dtype=True,
+             chunks=None):
     """ Write data to BigDatViewer format.
 
     Optionally downscale the input data to BigDataViewer scale pyramid.
@@ -191,6 +205,8 @@ def make_bdv(data, output_path,
         setup_name (str): name of this view set-up (default: None)
         convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
             This will map unsigned types to signed and fail if the value range is too large. (default: True)
+        chunks (tuple): chunks for the output dataset.
+            By default the h5py auto chunks are used (default: None)
     """
     # validate input data arguments
     assert isinstance(data, np.ndarray), "Input needs to be numpy array"
@@ -204,10 +220,18 @@ def make_bdv(data, output_path,
     if convert_dtype:
         data = convert_to_bdv_dtype(data)
 
+    # validate chunks
+    if chunks is None:
+        chunks_ = True
+    else:
+        shape = data.shape
+        chunks_ = tuple(min(ch, sh) for sh, ch in zip(shape, chunks))
+
     # write initial dataset
     base_key = 't00000/s%02i/0/cells' % setup_id
     with h5py.File(h5_path, 'a') as f:
-        f.create_dataset(base_key, data=data, compression='gzip')
+        f.create_dataset(base_key, data=data, compression='gzip',
+                         chunks=chunks_)
 
     # downsample if needed
     if downscale_factors is None:
