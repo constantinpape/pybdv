@@ -5,6 +5,11 @@ from shutil import rmtree
 import numpy as np
 import h5py
 
+try:
+    from elf.io import open_file
+except ImportError:
+    open_file = None
+
 
 class TestMakeBdv(unittest.TestCase):
     def setUp(self):
@@ -130,6 +135,20 @@ class TestMakeBdv(unittest.TestCase):
         make_bdv(data, out_path, chunks=chunks)
 
         with h5py.File(out_path, 'r') as f:
+            d = f['t00000/s00/0/cells'][:]
+        self.assertTrue(np.allclose(d, data))
+
+    @unittest.skipIf(open_file is None, "Need elf for n5 support")
+    def test_n5(self):
+        from pybdv import make_bdv
+        shape = (128,) * 3
+        chunks = (64,) * 3
+
+        out_path = './tmp/test.n5'
+        data = np.random.rand(*shape)
+        make_bdv(data, out_path, chunks=chunks)
+
+        with open_file(out_path, 'r') as f:
             d = f['t00000/s00/0/cells'][:]
         self.assertTrue(np.allclose(d, data))
 

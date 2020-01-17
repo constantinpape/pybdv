@@ -1,31 +1,18 @@
 import os
 import sys
 import numpy as np
-import h5py
 from tqdm import tqdm
 
-from .util import blocking, get_nblocks
+from .util import (blocking, get_nblocks, open_file, HAVE_ELF,
+                   HDF5_EXTENSIONS, N5_EXTENSIONS, XML_EXTENSIONS)
 from .metadata import write_h5_metadata, write_xml_metadata
 from .downsample import downsample
 from .dtypes import convert_to_bdv_dtype, get_new_dtype
 
-# we use elf.io.open_file in order to load more file formats,
-# if it is available.
-try:
-    from elf.io import open_file
-except ImportError:
-    # only supprt h5py if we don't have elf
-    def open_file(input_path, mode='a'):
-        return h5py.File(input_path, mode)
-
-
-HDF5_EXTENSIONS = ['.h5', '.hdf', '.hdf5']
-XML_EXTENSIONS = ['.xml']
-
 
 def handle_setup_id(setup_id, h5_path):
     if os.path.exists(h5_path):
-        with h5py.File(h5_path, 'r') as f:
+        with open_file(h5_path, 'r') as f:
             setup_ids = list(f['t00000'].keys())
             setup_ids = [int(sid[1:]) for sid in setup_ids]
     else:
@@ -44,7 +31,7 @@ def handle_setup_id(setup_id, h5_path):
 def copy_dataset(input_path, input_key, output_path, output_key,
                  convert_dtype=False, chunks=None):
 
-    with open_file(input_path, 'r') as f_in, h5py.File(output_path, 'a') as f_out:
+    with open_file(input_path, 'r') as f_in, open_file(output_path, 'a') as f_out:
 
         ds_in = f_in[input_key]
         shape = ds_in.shape
@@ -93,6 +80,11 @@ def normalize_output_path(output_path):
     elif ext.lower() in XML_EXTENSIONS:
         h5_path = base_path + '.h5'
         xml_path = output_path
+    elif ext.lower() in N5_EXTENSIONS:
+        if not HAVE_ELF:
+            raise ValueError("Can only write n5 with elf.")
+        h5_path = output_path
+        xml_path = base_path + '.xml'
     else:
         raise ValueError("File extension %s not supported" % ext)
     return h5_path, xml_path
@@ -229,7 +221,7 @@ def make_bdv(data, output_path,
 
     # write initial dataset
     base_key = 't00000/s%02i/0/cells' % setup_id
-    with h5py.File(h5_path, 'a') as f:
+    with open_file(h5_path, 'a') as f:
         f.create_dataset(base_key, data=data, compression='gzip',
                          chunks=chunks_)
 

@@ -1,6 +1,22 @@
 from itertools import product
 import numpy as np
 
+try:
+    from elf.io import open_file
+    HAVE_ELF = True
+except ImportError:
+    import h5py
+    HAVE_ELF = False
+
+    # only supprt h5py if we don't have elf
+    def open_file(input_path, mode='a'):
+        return h5py.File(input_path, mode)
+
+
+HDF5_EXTENSIONS = ['.h5', '.hdf', '.hdf5']
+XML_EXTENSIONS = ['.xml']
+N5_EXTENSIONS = ['.n5']
+
 
 def blocking(shape, block_shape):
     """ Generator for nd blocking.

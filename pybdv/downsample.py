@@ -1,11 +1,10 @@
 from functools import partial
 import numpy as np
-import h5py
 from skimage.transform import resize
 from skimage.measure import block_reduce
 from tqdm import tqdm
 
-from .util import blocking, grow_bounding_box, get_nblocks
+from .util import blocking, grow_bounding_box, get_nblocks, open_file
 
 
 def ds_interpolate(data, scale_factor, out_shape, order):
@@ -42,7 +41,7 @@ def downsample(path, in_key, out_key, factor, mode):
         raise ValueError("Downsampling mode %s is not supported" % mode)
     halo = factor
 
-    with h5py.File(path, 'a') as f:
+    with open_file(path, 'a') as f:
         ds_in = f[in_key]
         shape = ds_in.shape
         chunks = ds_in.chunks
