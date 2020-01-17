@@ -138,7 +138,7 @@ def make_scales(h5_path, downscale_factors, downscale_mode,
 def convert_to_bdv(input_path, input_key, output_path,
                    downscale_factors=None, downscale_mode='nearest',
                    resolution=[1., 1., 1.], unit='pixel',
-                   setup_id=None, setup_name=None, convert_dtype=True,
+                   setup_id=None, setup_name=None, convert_dtype=None,
                    chunks=None, n_threads=1):
     """ Convert hdf5 volume to BigDatViewer format.
 
@@ -159,7 +159,7 @@ def convert_to_bdv(input_path, input_key, output_path,
         setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
         setup_name (str): name of this view set-up (default: None)
         convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
-            This will map unsigned types to signed and fail if the value range is too large. (default: True)
+            This will map unsigned types to signed and fail if the value range is too large. (default: None)
         chunks (tuple): chunks for the output dataset.
             By default the h5py auto chunks are used (default: None)
         n_threads (int): number of chunks used for copying and downscaling (default: 1)
@@ -177,6 +177,10 @@ def convert_to_bdv(input_path, input_key, output_path,
 
     h5_path, xml_path, is_h5 = normalize_output_path(output_path)
     setup_id = handle_setup_id(setup_id, h5_path, is_h5)
+
+    # we need to convert the dtype only for the hdf5 based storage
+    if convert_dtype is None:
+        convert_dtype = is_h5
 
     # copy the initial dataset
     base_key = get_key(is_h5, time_point=0, setup_id=setup_id, scale=0)
@@ -208,7 +212,7 @@ def convert_to_bdv(input_path, input_key, output_path,
 def make_bdv(data, output_path,
              downscale_factors=None, downscale_mode='nearest',
              resolution=[1., 1., 1.], unit='pixel',
-             setup_id=None, setup_name=None, convert_dtype=True,
+             setup_id=None, setup_name=None, convert_dtype=None,
              chunks=None, n_threads=1):
     """ Write data to BigDatViewer format.
 
@@ -227,7 +231,7 @@ def make_bdv(data, output_path,
         setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
         setup_name (str): name of this view set-up (default: None)
         convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
-            This will map unsigned types to signed and fail if the value range is too large. (default: True)
+            This will map unsigned types to signed and fail if the value range is too large. (default: None)
         chunks (tuple): chunks for the output dataset.
             By default the h5py auto chunks are used (default: None)
         n_threads (int): number of chunks used for writing and downscaling (default: 1)
@@ -241,6 +245,10 @@ def make_bdv(data, output_path,
 
     h5_path, xml_path, is_h5 = normalize_output_path(output_path)
     setup_id = handle_setup_id(setup_id, h5_path, is_h5)
+
+    # we need to convert the dtype only for the hdf5 based storage
+    if convert_dtype is None:
+        convert_dtype = is_h5
 
     if convert_dtype:
         data = convert_to_bdv_dtype(data)
