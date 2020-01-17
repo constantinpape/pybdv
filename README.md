@@ -69,3 +69,8 @@ convert_to_bdv /path/to/in.h5 data /path/to/out --downscale_factors "[[2, 2, 2],
 ```
 
 The downscale factors need to be encoded as json list.
+
+
+### Conversion to n5-bdv format
+
+Bigdatviewer core also supports an [n5 based data format](https://github.com/bigdataviewer/bigdataviewer-core/blob/master/BDV%20N5%20format.md). The data can be converted to this format by passing a path with n5 ending as output path: `/path/to/out.n5`. In order to support this, [elf](https://github.com/constantinpape/elf) needs to be installed.
