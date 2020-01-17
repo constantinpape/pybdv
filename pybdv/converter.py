@@ -1,6 +1,7 @@
 import os
 import sys
 import numpy as np
+from concurrent import futures
 from tqdm import tqdm
 
 from .util import (blocking, get_nblocks, open_file, HAVE_ELF,
@@ -30,7 +31,7 @@ def handle_setup_id(setup_id, h5_path):
 
 
 def copy_dataset(input_path, input_key, output_path, output_key,
-                 convert_dtype=False, chunks=None):
+                 convert_dtype=False, chunks=None, n_threads=1):
 
     with open_file(input_path, 'r') as f_in, open_file(output_path, 'a') as f_out:
 
@@ -65,8 +66,14 @@ def copy_dataset(input_path, input_key, output_path, output_key,
         n_blocks = get_nblocks(shape, ds_chunks)
         print("Copy initial dataset from: %s:%s to %s:%s" % (input_path, input_key,
                                                              output_path, output_key))
-        for bb in tqdm(blocking(shape, ds_chunks), total=n_blocks):
-            copy_chunk(bb)
+
+        if n_threads > 1:
+            with futures.ThreadPoolExecutor(n_threads) as tp:
+                bbs = [bb for bb in blocking(shape, ds_chunks)]
+                list(tp.map(copy_chunk, bbs), total=n_blocks)
+        else:
+            for bb in tqdm(blocking(shape, ds_chunks), total=n_blocks):
+                copy_chunk(bb)
 
 
 def normalize_output_path(output_path):
@@ -91,7 +98,8 @@ def normalize_output_path(output_path):
     return h5_path, xml_path
 
 
-def make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id, chunks=None):
+def make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id,
+                chunks=None, n_threads=1):
     ds_modes = ('nearest', 'mean', 'max', 'min', 'interpolate')
     if downscale_mode not in ds_modes:
         raise ValueError("Invalid downscale mode %s, choose one of %s" % downscale_mode, str(ds_modes))
@@ -109,7 +117,7 @@ def make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id, chun
         in_key = 't00000/s%02i/%i/cells' % (setup_id, scale)
         out_key = 't00000/s%02i/%i/cells' % (setup_id, scale + 1)
         print("Downsample scale %i / %i" % (scale + 1, len(factors)))
-        downsample(h5_path, in_key, out_key, factor, downscale_mode)
+        downsample(h5_path, in_key, out_key, factor, downscale_mode, n_threads)
 
     # add first level to factors
     factors = [[1, 1, 1]] + factors
@@ -122,7 +130,7 @@ def convert_to_bdv(input_path, input_key, output_path,
                    downscale_factors=None, downscale_mode='nearest',
                    resolution=[1., 1., 1.], unit='pixel',
                    setup_id=None, setup_name=None, convert_dtype=True,
-                   chunks=None):
+                   chunks=None, n_threads=1):
     """ Convert hdf5 volume to BigDatViewer format.
 
     Optionally downscale the input volume and write it
@@ -145,6 +153,7 @@ def convert_to_bdv(input_path, input_key, output_path,
             This will map unsigned types to signed and fail if the value range is too large. (default: True)
         chunks (tuple): chunks for the output dataset.
             By default the h5py auto chunks are used (default: None)
+        n_threads (int): number of chunks used for copying and downscaling (default: 1)
     """
     # validate input data arguments
     if not os.path.exists(input_path):
@@ -164,14 +173,14 @@ def convert_to_bdv(input_path, input_key, output_path,
     base_key = 't00000/s%02i/0/cells' % setup_id
     copy_dataset(input_path, input_key,
                  h5_path, base_key, convert_dtype=convert_dtype,
-                 chunks=chunks)
+                 chunks=chunks, n_threads=n_threads)
 
     # downsample if needed
     if downscale_factors is None:
         # set single level downscale factor
         factors = [[1, 1, 1]]
     else:
-        factors = make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id)
+        factors = make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id, n_threads)
 
     # write bdv metadata
     write_h5_metadata(h5_path, factors, setup_id)
@@ -184,7 +193,7 @@ def make_bdv(data, output_path,
              downscale_factors=None, downscale_mode='nearest',
              resolution=[1., 1., 1.], unit='pixel',
              setup_id=None, setup_name=None, convert_dtype=True,
-             chunks=None):
+             chunks=None, n_threads=1):
     """ Write data to BigDatViewer format.
 
     Optionally downscale the input data to BigDataViewer scale pyramid.
@@ -205,6 +214,7 @@ def make_bdv(data, output_path,
             This will map unsigned types to signed and fail if the value range is too large. (default: True)
         chunks (tuple): chunks for the output dataset.
             By default the h5py auto chunks are used (default: None)
+        n_threads (int): number of chunks used for writing and downscaling (default: 1)
     """
     # validate input data arguments
     if not isinstance(data, np.ndarray):
@@ -229,15 +239,18 @@ def make_bdv(data, output_path,
     # write initial dataset
     base_key = 't00000/s%02i/0/cells' % setup_id
     with open_file(h5_path, 'a') as f:
-        f.create_dataset(base_key, data=data, compression='gzip',
-                         chunks=chunks_)
+        ds = f.create_dataset(base_key, shape=data.shape, compression='gzip',
+                              chunks=chunks_, dtype=data.dtype)
+        # if we have z5py, this will trigger multi-threaded write (otherwise no effect)
+        ds.n_threads = n_threads
+        ds[:] = data
 
     # downsample if needed
     if downscale_factors is None:
         # set single level downscale factor
         factors = [[1, 1, 1]]
     else:
-        factors = make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id)
+        factors = make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id, n_threads)
 
     # write bdv metadata
     write_h5_metadata(h5_path, factors, setup_id)

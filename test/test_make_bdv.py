@@ -152,6 +152,22 @@ class TestMakeBdv(unittest.TestCase):
             d = f['t00000/s00/0/cells'][:]
         self.assertTrue(np.allclose(d, data))
 
+    @unittest.skipIf(open_file is None, "Need elf for n5 support")
+    def test_multi_threaded(self):
+        from pybdv import make_bdv
+        shape = (128,) * 3
+        chunks = (64,) * 3
+
+        out_paths = ['./tmp/test.h5', './tmp/test.n5']
+        data = np.random.rand(*shape)
+        scale_factors = 2 * [[2, 2, 2]]
+        for out_path in out_paths:
+            make_bdv(data, out_path, chunks=chunks,
+                     n_threads=4, downscale_factors=scale_factors)
+            with open_file(out_path, 'r') as f:
+                d = f['t00000/s00/0/cells'][:]
+            self.assertTrue(np.allclose(d, data))
+
     # 2d is not supported yet
     @unittest.skip
     def test_ds_nearest_2d(self):
