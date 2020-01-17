@@ -24,7 +24,8 @@ def handle_setup_id(setup_id, h5_path):
             overwrite = input("Setup-id %i is alread present. Do you want to over-write it? y / [n]:")
             if overwrite != 'y':
                 sys.exit(0)
-    assert setup_id < 100, "Only up to 100 set-ups are supported"
+    if setup_id >= 100:
+        raise ValueError("Only up to 100 set-ups are supported")
     return setup_id
 
 
@@ -91,10 +92,14 @@ def normalize_output_path(output_path):
 
 
 def make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id, chunks=None):
-    assert downscale_mode in ('nearest', 'mean', 'max', 'min', 'interpolate')
-    assert all(isinstance(factor, (int, tuple, list)) for factor in downscale_factors)
-    assert all(len(factor) == 3 for factor in downscale_factors
-               if isinstance(factor, (tuple, list)))
+    ds_modes = ('nearest', 'mean', 'max', 'min', 'interpolate')
+    if downscale_mode not in ds_modes:
+        raise ValueError("Invalid downscale mode %s, choose one of %s" % downscale_mode, str(ds_modes))
+    if not all(isinstance(factor, (int, tuple, list)) for factor in downscale_factors):
+        raise ValueError("Invalid downscale factor")
+    if not all(len(factor) == 3 for factor in downscale_factors
+               if isinstance(factor, (tuple, list))):
+        raise ValueError("Invalid downscale factor")
     # normalize all factors to be tuple or list
     factors = [ndim*[factor] if isinstance(factor, int) else factor
                for factor in downscale_factors]
@@ -113,7 +118,6 @@ def make_scales(h5_path, downscale_factors, downscale_mode, ndim, setup_id, chun
 
 # TODO expose 'offsets' parameter
 # TODO support multiple time-points
-# TODO replace assertions with more meaningfull errors
 def convert_to_bdv(input_path, input_key, output_path,
                    downscale_factors=None, downscale_mode='nearest',
                    resolution=[1., 1., 1.], unit='pixel',
@@ -143,13 +147,15 @@ def convert_to_bdv(input_path, input_key, output_path,
             By default the h5py auto chunks are used (default: None)
     """
     # validate input data arguments
-    assert os.path.exists(input_path), input_path
+    if not os.path.exists(input_path):
+        raise ValueError("Input file %s does not exist" % input_path)
     with open_file(input_path, 'r') as f:
-        assert input_key in f, "%s not in %s" % (input_key, input_path)
+        if input_key not in f:
+            raise ValueError("%s not in %s" % (input_key, input_path))
         shape = f[input_key].shape
         ndim = len(shape)
-    assert ndim == 3, "Only support 3d"
-    assert len(resolution) == ndim
+    if ndim != 3 or len(resolution) != ndim:
+        raise ValueError("Invalid input dimensionality")
 
     h5_path, xml_path = normalize_output_path(output_path)
     setup_id = handle_setup_id(setup_id, h5_path)
@@ -201,10 +207,11 @@ def make_bdv(data, output_path,
             By default the h5py auto chunks are used (default: None)
     """
     # validate input data arguments
-    assert isinstance(data, np.ndarray), "Input needs to be numpy array"
+    if not isinstance(data, np.ndarray):
+        raise ValueError("Input needs to be numpy array")
     ndim = data.ndim
-    assert ndim == 3, "Only support 3d"
-    assert len(resolution) == ndim
+    if ndim != 3 or len(resolution) != ndim:
+        raise ValueError("Invalid input dimensionality")
 
     h5_path, xml_path = normalize_output_path(output_path)
     setup_id = handle_setup_id(setup_id, h5_path)

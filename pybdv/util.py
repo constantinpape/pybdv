@@ -25,7 +25,8 @@ def blocking(shape, block_shape):
         shape (tuple): nd shape
         block_shape (tuple): nd block shape
     """
-    assert len(shape) == len(block_shape), "Invalid number of dimensions."
+    if len(shape) != len(block_shape):
+        raise ValueError("Invalid number of dimensions.")
 
     # compute the ranges for the full shape
     ranges = [range(sha // bsha if sha % bsha == 0 else sha // bsha + 1)
@@ -48,7 +49,8 @@ def get_nblocks(shape, block_shape):
 
 
 def grow_bounding_box(bb, halo, shape):
-    assert len(bb) == len(halo) == len(shape)
+    if not (len(bb) == len(halo) == len(shape)):
+        raise ValueError("Invalid number of dimensions.")
     bb_grown = tuple(slice(max(b.start - ha, 0), min(b.stop + ha, sh))
                      for b, ha, sh in zip(bb, halo, shape))
     bb_local = tuple(slice(b.start - bg.start, b.stop - bg.start)
