@@ -160,8 +160,18 @@ def write_h5_metadata(path, scale_factors, setup_id=0):
         f.create_dataset('s%02i/subdivisions' % setup_id, data=chunks)
 
 
+# n5 metadata format is specified here:
+# https://github.com/bigdataviewer/bigdataviewer-core/blob/master/BDV%20N5%20format.md
 def write_n5_metadata(path, scale_factors, resolution, setup_id=0):
     with open_file(path) as f:
+        key = get_key(False, time_point=0, setup_id=setup_id, scale=0)
+        dtype = str(f[key].dtype)
+
+        root_key = get_key(False, setup_id=setup_id)
+        root = f[root_key]
+        root.attrs['downsamplingFactors'] = [factor[::-1] for factor in scale_factors]
+        root.attrs['dataType'] = dtype
+
         group_key = get_key(False, time_point=0, setup_id=setup_id)
         g = f[group_key]
         g.attrs['multiScale'] = True
