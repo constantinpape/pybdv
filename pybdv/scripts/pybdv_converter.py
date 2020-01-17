@@ -25,6 +25,8 @@ def main():
                         help='id of the setup to write')
     parser.add_argument('--setup_name', type=str, default=None,
                         help='name of the setup to write')
+    parser.add_argument('--n_threads', type=int, default=1,
+                        help='number of threads used for copying and downsampling')
 
     args = parser.parse_args()
 
@@ -40,7 +42,8 @@ def main():
     convert_to_bdv(args.input_path, args.input_key, args.output_path,
                    downscale_factors, args.downscale_mode,
                    resolution=args.resolution, unit=args.unit,
-                   setup_id=args.setup_id, setup_name=args.setup_name)
+                   setup_id=args.setup_id, setup_name=args.setup_name,
+                   n_threads=n_threads)
 
 
 if __name__ == '__main__':
