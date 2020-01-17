@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import xml.etree.ElementTree as ET
-from .util import open_file, HDF5_EXTENSIONS
+from .util import open_file, get_key
 
 
 # pretty print xml, from:
@@ -22,17 +22,9 @@ def indent_xml(elem, level=0):
             elem.tail = i
 
 
-def is_hdf5(path):
-    return os.path.splitext(path)[1].lower() in HDF5_EXTENSIONS
-
-
-def get_bdv_type(path):
-    return 'bdv.hdf5' if is_hdf5(path) else 'bdv.n5'
-
-
 # TODO support multiple timepoints and different types of views
 # (right now, we only support multiple channels)
-def write_xml_metadata(xml_path, h5_path, unit, resolution,
+def write_xml_metadata(xml_path, h5_path, unit, resolution, is_h5,
                        offsets=(0., 0., 0.), setup_id=0,
                        setup_name=None):
     """ Write bigdataviewer xml.
@@ -42,10 +34,12 @@ def write_xml_metadata(xml_path, h5_path, unit, resolution,
     # number of timepoints hard-coded to 1
     nt = 1
     setup_name = 'Setup%i' % setup_id if setup_name is None else setup_name
-    key = 't00000/s%02i/0/cells' % setup_id
+    key = get_key(is_h5, time_point=0, setup_id=setup_id, scale=0)
     with open_file(h5_path, 'r') as f:
         shape = f[key].shape
     nz, ny, nx = tuple(shape)
+
+    format_type = 'hdf5' if is_h5 else 'n5'
 
     # check if we have an xml already
     if os.path.exists(xml_path):
@@ -77,9 +71,9 @@ def write_xml_metadata(xml_path, h5_path, unit, resolution,
         seqdesc = ET.SubElement(root, 'SequenceDescription')
         # make the image loader
         imgload = ET.SubElement(seqdesc, 'ImageLoader')
-        bdv_dtype = get_bdv_type(h5_path)
+        bdv_dtype = 'bdv.%s' % format_type
         imgload.set('format', bdv_dtype)
-        el = ET.SubElement(imgload, 'hdf5')
+        el = ET.SubElement(imgload, format_type)
         el.set('type', 'relative')
         el.text = os.path.basename(h5_path)
 
@@ -151,7 +145,7 @@ def write_h5_metadata(path, scale_factors, setup_id=0):
             effective_scale = [eff * sf for sf, eff in zip(scale_factor, effective_scale)]
 
         # get the chunk size for this level
-        out_key = 't00000/s%02i/%i/cells' % (setup_id, scale)
+        out_key = get_key(True, time_point=0, setup_id=setup_id, scale=scale)
         with open_file(path, 'r') as f:
             # for some reason I don't understand we do not need to invert here
             chunk = f[out_key].chunks[::-1]
@@ -159,11 +153,8 @@ def write_h5_metadata(path, scale_factors, setup_id=0):
         scales.append(effective_scale[::-1])
         chunks.append(chunk)
 
-    is_h5 = is_hdf5(path)
     scales = np.array(scales).astype('float32')
     chunks = np.array(chunks).astype('int')
     with open_file(path, 'a') as f:
-        f.create_dataset('s%02i/resolutions' % setup_id, data=scales,
-                         chunks=None if is_h5 else scales.shape)
-        f.create_dataset('s%02i/subdivisions' % setup_id, data=chunks,
-                         chunks=None if is_h5 else chunks.shape)
+        f.create_dataset('s%02i/resolutions' % setup_id, data=scales)
+        f.create_dataset('s%02i/subdivisions' % setup_id, data=chunks)

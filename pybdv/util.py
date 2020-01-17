@@ -18,6 +18,25 @@ XML_EXTENSIONS = ['.xml']
 N5_EXTENSIONS = ['.n5']
 
 
+def get_key(is_h5, time_point=None, setup_id=None, scale=None):
+    sequence = []
+    if is_h5:
+        if time_point is not None:
+            sequence.append('t%05i' % time_point)
+        if setup_id is not None:
+            sequence.append('s%02i' % setup_id)
+        if scale is not None:
+            sequence.append('%i/cells' % scale)
+    else:
+        if setup_id is not None:
+            sequence.append('setup%i' % setup_id)
+        if time_point is not None:
+            sequence.append('timepoint%i' % time_point)
+        if scale is not None:
+            sequence.append('s%i' % scale)
+    return '/'.join(sequence)
+
+
 def blocking(shape, block_shape):
     """ Generator for nd blocking.
 
