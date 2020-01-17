@@ -78,8 +78,7 @@ def downsample(path, in_key, out_key, factor, mode, n_threads=1):
         n_blocks = get_nblocks(sampled_shape, chunks)
         if n_threads > 1:
             with futures.ThreadPoolExecutor(n_threads) as tp:
-                bbs = [bb for bb in blocking(shape, chunks)]
-                list(tp.map(sample_chunk, bbs), total=n_blocks)
+                list(tqdm(tp.map(sample_chunk, blocking(shape, chunks)), total=n_blocks))
         else:
             for bb in tqdm(blocking(sampled_shape, chunks), total=n_blocks):
                 sample_chunk(bb)

@@ -158,3 +158,17 @@ def write_h5_metadata(path, scale_factors, setup_id=0):
     with open_file(path, 'a') as f:
         f.create_dataset('s%02i/resolutions' % setup_id, data=scales)
         f.create_dataset('s%02i/subdivisions' % setup_id, data=chunks)
+
+
+def write_n5_metadata(path, scale_factors, resolution, setup_id=0):
+    with open_file(path) as f:
+        group_key = get_key(False, time_point=0, setup_id=setup_id)
+        g = f[group_key]
+        g.attrs['multiScale'] = True
+        g.attrs['resolution'] = resolution[::-1]
+
+        effective_scale = [1, 1, 1]
+        for scale_id, factor in enumerate(scale_factors):
+            ds = g['s%i' % scale_id]
+            effective_scale = [eff * sf for eff, sf in zip(effective_scale, factor)]
+            ds.attrs['downsamplingFactors'] = effective_scale[::-1]

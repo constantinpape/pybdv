@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 from .util import (blocking, get_nblocks, open_file, get_key,
                    HAVE_ELF, HDF5_EXTENSIONS, N5_EXTENSIONS, XML_EXTENSIONS)
-from .metadata import write_h5_metadata, write_xml_metadata
+from .metadata import write_h5_metadata, write_xml_metadata, write_n5_metadata
 from .downsample import downsample
 from .dtypes import convert_to_bdv_dtype, get_new_dtype
 
@@ -76,8 +76,7 @@ def copy_dataset(input_path, input_key, output_path, output_key,
 
         if n_threads > 1:
             with futures.ThreadPoolExecutor(n_threads) as tp:
-                bbs = [bb for bb in blocking(shape, ds_chunks)]
-                list(tp.map(copy_chunk, bbs), total=n_blocks)
+                list(tqdm(tp.map(copy_chunk, blocking(shape, ds_chunks)), total=n_blocks))
         else:
             for bb in tqdm(blocking(shape, ds_chunks), total=n_blocks):
                 copy_chunk(bb)
@@ -197,6 +196,8 @@ def convert_to_bdv(input_path, input_key, output_path,
     # (old) h5 layout
     if is_h5:
         write_h5_metadata(h5_path, factors, setup_id)
+    else:
+        write_n5_metadata(h5_path, factors, resolution, setup_id)
     # write bdv xml metadata
     write_xml_metadata(xml_path, h5_path, unit,
                        resolution, is_h5,
@@ -272,6 +273,8 @@ def make_bdv(data, output_path,
     # (old) h5 layout
     if is_h5:
         write_h5_metadata(h5_path, factors, setup_id)
+    else:
+        write_n5_metadata(h5_path, factors, resolution, setup_id)
     # write bdv xml metadata
     write_xml_metadata(xml_path, h5_path, unit,
                        resolution, is_h5,
