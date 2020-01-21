@@ -24,6 +24,14 @@ def ds_block_reduce(data, scale_factor, out_shape, function):
     return out
 
 
+def sample_shape(shape, factor, add_incomplete_blocks=False):
+    if add_incomplete_blocks:
+        return tuple(sh // scale_factor + int((sh % scale_factor) != 0)
+                     for sh, scale_factor in zip(shape, factor))
+    else:
+        return tuple(sh // scale_factor for sh, scale_factor in zip(shape, factor))
+
+
 def downsample(path, in_key, out_key, factor, mode, n_threads=1):
     """ Downsample input hdf5 volume
     """
@@ -47,8 +55,7 @@ def downsample(path, in_key, out_key, factor, mode, n_threads=1):
         shape = ds_in.shape
         chunks = ds_in.chunks
 
-        sampled_shape = tuple(sh // scale_factor + int((sh % scale_factor) != 0)
-                              for sh, scale_factor in zip(shape, factor))
+        sampled_shape = sample_shape(shape, factor)
         chunks = tuple(min(sh, ch) for sh, ch in zip(sampled_shape, ds_in.chunks))
 
         ds_out = f.create_dataset(out_key, shape=sampled_shape, chunks=chunks,
