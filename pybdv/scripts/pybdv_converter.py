@@ -43,7 +43,7 @@ def main():
                    downscale_factors, args.downscale_mode,
                    resolution=args.resolution, unit=args.unit,
                    setup_id=args.setup_id, setup_name=args.setup_name,
-                   n_threads=n_threads)
+                   n_threads=args.n_threads)
 
 
 if __name__ == '__main__':
