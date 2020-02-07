@@ -1,3 +1,4 @@
+import os
 from itertools import product
 import numpy as np
 
@@ -75,3 +76,28 @@ def grow_bounding_box(bb, halo, shape):
     bb_local = tuple(slice(b.start - bg.start, b.stop - bg.start)
                      for bg, b in zip(bb_grown, bb))
     return bb_grown, bb_local
+
+
+def get_number_of_scales(path, time_point, setup_id):
+    ext = os.path.splitext(path)[1]
+    is_h5 = ext in HDF5_EXTENSIONS
+    key = get_key(is_h5, time_point, setup_id)
+    with open_file(path, 'r') as f:
+        n_scales = len(f[key])
+    return n_scales
+
+
+def get_scale_factors(path, setup_id):
+    ext = os.path.splitext(path)[1]
+    is_h5 = ext in HDF5_EXTENSIONS
+
+    with open_file(path, 'r') as f:
+        if is_h5:
+            key = 's%02i/resolutions' % setup_id
+            ds = f[key]
+            scale_factors = ds[:].tolist()
+        else:
+            key = get_key(is_h5, time_point=None, setup_id=setup_id)
+            scale_factors = f[key].attrs['downsamplingFactors']
+
+    return scale_factors

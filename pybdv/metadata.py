@@ -22,6 +22,11 @@ def indent_xml(elem, level=0):
             elem.tail = i
 
 
+#
+# functions to write the metadata
+#
+
+
 # TODO support multiple timepoints and different types of views
 # (right now, we only support multiple channels)
 def write_xml_metadata(xml_path, h5_path, unit, resolution, is_h5,
@@ -188,3 +193,46 @@ def write_n5_metadata(path, scale_factors, resolution, setup_id=0):
             ds = g['s%i' % scale_id]
             effective_scale = [eff * sf for eff, sf in zip(effective_scale, factor)]
             ds.attrs['downsamplingFactors'] = factor
+
+
+#
+# helper functions to read attributes from the xml metadata
+#
+
+
+def get_bdv_format(xml_path):
+    root = ET.parse(xml_path).getroot()
+    seqdesc = root.find('SequenceDescription')
+    imgload = seqdesc.find('ImageLoader')
+    return imgload.attrib['format']
+
+
+def get_resolution(xml_path, setup_id):
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    seqdesc = root.find('SequenceDescription')
+    viewsets = seqdesc.find('ViewSetups')
+    vsetups = viewsets.findall('ViewSetup')
+    for vs in vsetups:
+        if vs.find('id').text == str(setup_id):
+            vox = vs.find('voxelSize')
+            resolution = vox.find('size').text
+            return [float(res) for res in resolution.split()][::-1]
+    raise RuntimeError("Could not find setup %s" % str(setup_id))
+
+
+def get_data_path(xml_path, return_absolute_path=False):
+    et = ET.parse(xml_path).getroot()
+    et = et.find('SequenceDescription')
+    et = et.find('ImageLoader')
+    node = et.find('hdf5')
+    if node is None:
+        node = et.find('n5')
+    if node is None:
+        raise RuntimeError("Could not find valid data path in xml.")
+    path = node.text
+    # this assumes relative path in xml
+    if return_absolute_path:
+        path = os.path.join(os.path.split(xml_path)[0], path)
+        path = os.path.abspath(os.path.relpath(path))
+    return path
