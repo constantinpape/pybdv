@@ -100,4 +100,6 @@ def get_scale_factors(path, setup_id):
             key = get_key(is_h5, time_point=None, setup_id=setup_id)
             scale_factors = f[key].attrs['downsamplingFactors']
 
+    # need to switch from XYZ to ZYX
+    scale_factors = [sc[::-1] for sc in scale_factors]
     return scale_factors
