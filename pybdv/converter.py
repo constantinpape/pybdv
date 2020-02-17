@@ -20,7 +20,7 @@ def handle_setup_id(setup_id, h5_path, is_h5):
                 setup_ids = list(f['t00000'].keys())
                 setup_ids = [int(sid[1:]) for sid in setup_ids]
             else:
-                setup_ids = [key for key in f.keys() if key.sartswith('setup')]
+                setup_ids = [key for key in f.keys() if key.startswith('setup')]
                 setup_ids = [int(sid[5:]) for sid in setup_ids]
     else:
         setup_ids = [-1]
