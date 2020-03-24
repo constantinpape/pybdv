@@ -21,12 +21,12 @@ class TestMakeBdv(unittest.TestCase):
         except OSError:
             pass
 
-    def _test_simple(self, shape):
+    def _test_simple(self, shape, affine=None):
         from pybdv import make_bdv
         data = np.random.rand(*shape).astype('float32')
 
         out_path = './tmp/test.h5'
-        make_bdv(data, out_path)
+        make_bdv(data, out_path, affine=affine)
 
         key = 't00000/s00/0/cells'
         self.assertTrue(os.path.exists(out_path))
@@ -37,25 +37,36 @@ class TestMakeBdv(unittest.TestCase):
             out_data = ds[:]
         self.assertTrue(np.allclose(data, out_data))
 
-    def test_simple_3d(self):
+    def test_simple(self):
         shape = (100, 100, 100)
         self._test_simple(shape)
 
-    # TODO test views with different registrations
+    def test_affine(self):
+        from pybdv.metadata import get_affine
+        shape = (100, 100, 100)
+        affine = np.random.rand(12).tolist()
+        affine = [round(aff, 4) for aff in affine]
+        self._test_simple(shape, affine)
+        affine_out = get_affine('./tmp/test.xml', 0)['affine0']
+        self.assertEqual(affine, affine_out)
+
     def test_multi_setup(self):
         from pybdv import make_bdv
+        from pybdv.metadata import get_affine
         shape = (64,) * 3
-        out_path = './tmp/test.h5'
-
         n_views = 2
         out_path = './tmp/test.h5'
 
         data_dict = {}
+        affine_dict = {}
 
         for vid in range(n_views):
             data = np.random.rand(*shape).astype('float32')
-            make_bdv(data, out_path, setup_id=vid)
+            affine = {'trafo1': [round(aff, 4) for aff in np.random.rand(12)],
+                      'trafo2': [round(aff, 4) for aff in np.random.rand(12)]}
+            make_bdv(data, out_path, setup_id=vid, affine=affine)
             data_dict[vid] = data
+            affine_dict[vid] = affine
 
         # check implicit setup id
         data = np.random.rand(*shape).astype('float32')
@@ -71,7 +82,12 @@ class TestMakeBdv(unittest.TestCase):
                 data = f[expected_key][:]
                 self.assertTrue(np.allclose(data, exp_data))
 
-        # TODO check the xml metadata
+        # check affine trafos (only for explicit setup-ids)
+        xml_path = './tmp/test.xml'
+        for vid in range(n_views):
+            affine = affine_dict[vid]
+            affine_out = get_affine(xml_path, vid)
+            self.assertEqual(affine, affine_out)
 
     def _test_ds(self, shape, mode):
         from pybdv import make_bdv

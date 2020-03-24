@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 from .util import (blocking, get_nblocks, open_file, get_key,
                    HAVE_ELF, HDF5_EXTENSIONS, N5_EXTENSIONS, XML_EXTENSIONS)
-from .metadata import write_h5_metadata, write_xml_metadata, write_n5_metadata
+from .metadata import validate_affine, write_h5_metadata, write_xml_metadata, write_n5_metadata
 from .downsample import downsample
 from .dtypes import convert_to_bdv_dtype, get_new_dtype
 
@@ -133,13 +133,12 @@ def make_scales(h5_path, downscale_factors, downscale_mode,
     return factors
 
 
-# TODO expose 'offsets' parameter
 # TODO support multiple time-points
 def convert_to_bdv(input_path, input_key, output_path,
                    downscale_factors=None, downscale_mode='nearest',
                    resolution=[1., 1., 1.], unit='pixel',
-                   setup_id=None, setup_name=None, convert_dtype=None,
-                   chunks=None, n_threads=1):
+                   setup_id=None, setup_name=None, affine=None,
+                   convert_dtype=None, chunks=None, n_threads=1):
     """ Convert hdf5 volume to BigDatViewer format.
 
     Optionally downscale the input volume and write it
@@ -158,6 +157,10 @@ def convert_to_bdv(input_path, input_key, output_path,
         unit (str): unit of measurement
         setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
         setup_name (str): name of this view set-up (default: None)
+        affine (list[float] or dict[str, list[float]]): affine view transformation(s) for this setup.
+            Can either be a list for a single transformation or a dictionary for multiple transformations.
+            Each transformation needs to be given in the bdv convention, i.e. using XYZ axis convention
+            unlike the other parameters of pybdv, that expect ZYX axis convention. (default: None)
         convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
             This will map unsigned types to signed and fail if the value range is too large. (default: None)
         chunks (tuple): chunks for the output dataset.
@@ -174,6 +177,8 @@ def convert_to_bdv(input_path, input_key, output_path,
         ndim = len(shape)
     if ndim != 3 or len(resolution) != ndim:
         raise ValueError("Invalid input dimensionality")
+    if affine is not None:
+        validate_affine(affine)
 
     h5_path, xml_path, is_h5 = normalize_output_path(output_path)
     setup_id = handle_setup_id(setup_id, h5_path, is_h5)
@@ -206,14 +211,15 @@ def convert_to_bdv(input_path, input_key, output_path,
     write_xml_metadata(xml_path, h5_path, unit,
                        resolution, is_h5,
                        setup_id=setup_id,
-                       setup_name=setup_name)
+                       setup_name=setup_name,
+                       affine=affine)
 
 
 def make_bdv(data, output_path,
              downscale_factors=None, downscale_mode='nearest',
              resolution=[1., 1., 1.], unit='pixel',
-             setup_id=None, setup_name=None, convert_dtype=None,
-             chunks=None, n_threads=1):
+             setup_id=None, setup_name=None, affine=None,
+             convert_dtype=None, chunks=None, n_threads=1):
     """ Write data to BigDatViewer format.
 
     Optionally downscale the input data to BigDataViewer scale pyramid.
@@ -230,18 +236,24 @@ def make_bdv(data, output_path,
         unit (str): unit of measurement
         setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
         setup_name (str): name of this view set-up (default: None)
+        affine (list[float] or dict[str, list[float]]): affine view transformation(s) for this setup.
+            Can either be a list for a single transformation or a dictionary for multiple transformations.
+            Each transformation needs to be given in the bdv convention, i.e. using XYZ axis convention
+            unlike the other parameters of pybdv, that expect ZYX axis convention. (default: None)
         convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
             This will map unsigned types to signed and fail if the value range is too large. (default: None)
         chunks (tuple): chunks for the output dataset.
             By default the h5py auto chunks are used (default: None)
         n_threads (int): number of chunks used for writing and downscaling (default: 1)
     """
-    # validate input data arguments
+    # validate input arguments
     if not isinstance(data, np.ndarray):
         raise ValueError("Input needs to be numpy array")
     ndim = data.ndim
     if ndim != 3 or len(resolution) != ndim:
         raise ValueError("Invalid input dimensionality")
+    if affine is not None:
+        validate_affine(affine)
 
     h5_path, xml_path, is_h5 = normalize_output_path(output_path)
     setup_id = handle_setup_id(setup_id, h5_path, is_h5)
@@ -287,4 +299,5 @@ def make_bdv(data, output_path,
     write_xml_metadata(xml_path, h5_path, unit,
                        resolution, is_h5,
                        setup_id=setup_id,
-                       setup_name=setup_name)
+                       setup_name=setup_name,
+                       affine=affine)

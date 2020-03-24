@@ -30,8 +30,7 @@ def indent_xml(elem, level=0):
 # TODO support multiple timepoints and different types of views
 # (right now, we only support multiple channels)
 def write_xml_metadata(xml_path, h5_path, unit, resolution, is_h5,
-                       offsets=(0., 0., 0.), setup_id=0,
-                       setup_name=None):
+                       setup_id=0, setup_name=None, affine=None):
     """ Write bigdataviewer xml.
 
     Based on https://github.com/tlambert03/imarispy/blob/master/imarispy/bdv.py.
@@ -98,7 +97,6 @@ def write_xml_metadata(xml_path, h5_path, unit, resolution, is_h5,
 
     # parse the resolution and offsets
     dz, dy, dx = resolution
-    oz, oy, ox = offsets
 
     # setup for this view
     vs = ET.SubElement(viewsets, 'ViewSetup')
@@ -118,22 +116,16 @@ def write_xml_metadata(xml_path, h5_path, unit, resolution, is_h5,
     ET.SubElement(chan, 'id').text = str(setup_id)
     ET.SubElement(chan, 'name').text = str(setup_id)
 
-    # TODO support different registrations here
-    for t in range(nt):
-        vreg = ET.SubElement(vregs, 'ViewRegistration')
-        vreg.set('timepoint', str(t))
-        vreg.set('setup', str(setup_id))
-        vt = ET.SubElement(vreg, 'ViewTransform')
-        vt.set('type', 'affine')
-        ET.SubElement(vt, 'affine').text = '{} 0.0 0.0 {} 0.0 {} 0.0 {} 0.0 0.0 {} {}'.format(dx, ox,
-                                                                                              dy, oy,
-                                                                                              dz, oz)
+    for time_point in range(nt):
+        if affine is None:
+            _write_default_affine(vregs, setup_id, time_point, dx, dy, dz)
+        else:
+            _write_affine(vregs, setup_id, time_point, affine)
     indent_xml(root)
     tree = ET.ElementTree(root)
     tree.write(xml_path)
 
 
-# TODO support multiple timepoints
 def write_h5_metadata(path, scale_factors, setup_id=0):
     effective_scale = [1, 1, 1]
 
@@ -193,6 +185,92 @@ def write_n5_metadata(path, scale_factors, resolution, setup_id=0):
             ds = g['s%i' % scale_id]
             effective_scale = [eff * sf for eff, sf in zip(effective_scale, factor)]
             ds.attrs['downsamplingFactors'] = factor
+
+
+#
+# helper functions to support affine transformations
+#
+
+def validate_affine(affine):
+
+    def _check_affine(trafo):
+        if len(trafo) != 12:
+            raise ValueError("Invalid length of affine transformation, expect 12, got %i" % len(trafo))
+        all_floats = all(isinstance(aff, float) for aff in trafo)
+        if not all_floats:
+            raise ValueError("Invalid datatype in affine transformation, expect list of floats")
+
+    if isinstance(affine, list):
+        _check_affine(affine)
+    elif isinstance(affine, dict):
+        for aff in affine.values():
+            _check_affine(aff)
+    else:
+        raise ValueError("Invalid type for affine transformatin, expect list or dict, got %s" % type(affine))
+
+
+def _write_default_affine(vregs, setup_id, time_point, dx, dy, dz):
+    vreg = ET.SubElement(vregs, 'ViewRegistration')
+    vreg.set('timepoint', str(time_point))
+    vreg.set('setup', str(setup_id))
+    vt = ET.SubElement(vreg, 'ViewTransform')
+    vt.set('type', 'affine')
+    ox, oy, oz = 0., 0., 0.
+    ET.SubElement(vt, 'affine').text = '{} 0.0 0.0 {} 0.0 {} 0.0 {} 0.0 0.0 {} {}'.format(dx, ox,
+                                                                                          dy, oy,
+                                                                                          dz, oz)
+
+
+def _write_affine(vregs, setup_id, time_point, affine):
+    vreg = ET.SubElement(vregs, 'ViewRegistration')
+    vreg.set('timepoint', str(time_point))
+    vreg.set('setup', str(setup_id))
+    if isinstance(affine, list):
+        vt = ET.SubElement(vreg, 'ViewTransform')
+        vt.set('type', 'affine')
+        ET.SubElement(vt, 'affine').text = ' '.join([str(aff) for aff in affine])
+    else:
+        for name, affs in affine.items():
+            vt = ET.SubElement(vreg, 'ViewTransform')
+            vt.set('type', 'affine')
+            ET.SubElement(vt, 'affine').text = ' '.join([str(aff) for aff in affs])
+            ET.SubElement(vt, 'Name').text = name
+
+
+def get_affine(xml_path, setup_id):
+    """ Get affine trasnformation for given setup id from xml.
+
+    Arguments:
+        xml_path (str): path to the xml file
+        setup_id (int): setup id for which the affine trafo(s) should be loaded
+    Returns:
+        dict: mapping name of transformation to its parameters
+            If transformation does not have a name, will be called 'affine%i',
+            where i is counting the number of transformations.
+    """
+    root = ET.parse(xml_path).getroot()
+    vregs = root.find('ViewRegistrations')
+
+    for vreg in vregs.findall('ViewRegistration'):
+        setup = int(vreg.attrib['setup'])
+        if setup != setup_id:
+            continue
+
+        ii = 0
+        affine = {}
+        for vt in vreg.findall('ViewTransform'):
+            name = vt.find('Name')
+            if name is None:
+                name = 'affine%i' % ii
+            else:
+                name = name.text
+            trafo = vt.find('affine').text
+            trafo = [float(aff) for aff in trafo.split()]
+            affine[name] = trafo
+            ii += 1
+        return affine
+
+    raise RuntimeError("Could not find setup %s" % str(setup_id))
 
 
 #
