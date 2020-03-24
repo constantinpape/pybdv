@@ -41,12 +41,6 @@ class TestMakeBdv(unittest.TestCase):
         shape = (100, 100, 100)
         self._test_simple(shape)
 
-    # 2d is not supported yet
-    @unittest.skip
-    def test_simple_2d(self):
-        shape = (256, 256)
-        self._test_simple(shape)
-
     # TODO test views with different registrations
     def test_multi_setup(self):
         from pybdv import make_bdv
@@ -101,11 +95,11 @@ class TestMakeBdv(unittest.TestCase):
                 exp_shape = tuple(sh // sf
                                   for sh, sf in zip(exp_shape, downscale_factors[scale]))
 
-    def test_ds_nearest_3d(self):
+    def test_ds_nearest(self):
         shape = (256,) * 3
         self._test_ds(shape, 'nearest')
 
-    def test_ds_mean_3d(self):
+    def test_ds_mean(self):
         shape = (256,) * 3
         self._test_ds(shape, 'mean')
 
@@ -169,18 +163,6 @@ class TestMakeBdv(unittest.TestCase):
             with open_file(out_path, 'r') as f:
                 d = f[key][:]
             self.assertTrue(np.allclose(d, data))
-
-    # 2d is not supported yet
-    @unittest.skip
-    def test_ds_nearest_2d(self):
-        shape = (512,) * 2
-        self._test_ds(shape, 'nearest')
-
-    # 2d is not supported yet
-    @unittest.skip
-    def test_ds_mean_2d(self):
-        shape = (512,) * 2
-        self._test_ds(shape, 'mean')
 
 
 if __name__ == '__main__':
