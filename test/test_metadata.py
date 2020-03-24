@@ -26,10 +26,10 @@ class TestMetadata(unittest.TestCase):
             rmtree(self.path_n5)
             os.remove(self.path_n5_xml)
 
-    def _make_h5(self):
+    def _make_h5(self, setup_id=None, resolution=None):
         data = np.random.rand(*self.shape)
-        make_bdv(data, self.path_h5,
-                 resolution=self.resolution)
+        make_bdv(data, self.path_h5, setup_id=setup_id,
+                 resolution=self.resolution if resolution is None else resolution)
 
     def _make_n5(self):
         data = np.random.rand(*self.shape)
@@ -49,9 +49,16 @@ class TestMetadata(unittest.TestCase):
 
     def test_get_resolution(self):
         from pybdv.metadata import get_resolution
+
         self._make_h5()
         resolution = get_resolution(self.path_h5_xml, 0)
         self.assertEqual(resolution, self.resolution)
+
+        res2 = [1., 3.1415926, 42.]
+        self._make_h5(1, res2)
+        resolution = get_resolution(self.path_h5_xml, 1)
+        self.assertEqual(resolution, res2)
+
         if z5py is not None:
             self._make_n5()
             resolution = get_resolution(self.path_n5_xml, 0)
