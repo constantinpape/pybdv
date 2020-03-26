@@ -207,7 +207,7 @@ class TestMakeBdv(unittest.TestCase):
         for out_path, is_h5 in zip(out_paths, (True, False)):
             make_bdv(data, out_path, chunks=chunks,
                      n_threads=4, downscale_factors=scale_factors)
-            key = get_key(is_h5, time_point=0, setup_id=0, scale=0)
+            key = get_key(is_h5, timepoint=0, setup_id=0, scale=0)
             with open_file(out_path, 'r') as f:
                 d = f[key][:]
             self.assertTrue(np.allclose(d, data))

@@ -171,8 +171,27 @@ def write_h5_metadata(path, scale_factors, setup_id=0, timepoint=0):
     scales = np.array(scales).astype('float32')
     chunks = np.array(chunks).astype('int')
     with open_file(path, 'a') as f:
-        f.create_dataset('s%02i/resolutions' % setup_id, data=scales)
-        f.create_dataset('s%02i/subdivisions' % setup_id, data=chunks)
+        # write the resolution metadata for this set-up,
+        # or if if we have this set-up already make sure
+        # that the metadata is consistent
+        key_res = 's%02i/resolutions' % setup_id
+        if key_res in f:
+            scales_expected = f[key_res][:]
+            if not np.array_equal(scales_expected, scales):
+                raise RuntimeError("Metadata for setup %i already exists and is inconsistent" % setup_id)
+        else:
+            f.create_dataset(key_res, data=scales)
+
+        # write the chunk metadata for this set-up,
+        # or if if we have this set-up already make sure
+        # that the metadata is consistent
+        key_chunks = 's%02i/subdivisions' % setup_id
+        if key_chunks in f:
+            chunks_expected = f[key_chunks][:]
+            if not np.array_equal(chunks_expected, chunks):
+                raise RuntimeError("Metadata for setup %i already exists and is inconsistent" % setup_id)
+        else:
+            f.create_dataset(key_chunks, data=chunks)
 
 
 # n5 metadata format is specified here:
@@ -190,8 +209,18 @@ def write_n5_metadata(path, scale_factors, resolution, setup_id=0, timepoint=0):
 
         root_key = get_key(False, setup_id=setup_id)
         root = f[root_key]
-        root.attrs['downsamplingFactors'] = effective_scales
-        root.attrs['dataType'] = dtype
+        attrs = root.attrs
+
+        # write setup metadata / check for consistency if it already exists
+        if 'downsamplingFactors' in attrs and attrs['downsamplingFactors'] != effective_scales:
+            raise RuntimeError("Metadata for setup %i already exists and is inconsistent" % setup_id)
+        else:
+            root.attrs['downsamplingFactors'] = effective_scales
+
+        if 'dataType' in attrs and attrs['dataType'] != dtype:
+            raise RuntimeError("Metadata for setup %i already exists and is inconsistent" % setup_id)
+        else:
+            root.attrs['dataType'] = dtype
 
         group_key = get_key(False, timepoint=timepoint, setup_id=setup_id)
         g = f[group_key]
@@ -272,7 +301,7 @@ def get_affine(xml_path, setup_id, timepoint=0):
 
     for vreg in vregs.findall('ViewRegistration'):
         setup = int(vreg.attrib['setup'])
-        tp = int(vreg.attrib('timepoint'))
+        tp = int(vreg.attrib['timepoint'])
         if (setup != setup_id) or (timepoint != tp):
             continue
 
