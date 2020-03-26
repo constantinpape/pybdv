@@ -6,7 +6,8 @@ from tqdm import tqdm
 
 from .util import (blocking, get_nblocks, open_file, get_key,
                    HAVE_ELF, HDF5_EXTENSIONS, N5_EXTENSIONS, XML_EXTENSIONS)
-from .metadata import validate_affine, write_h5_metadata, write_xml_metadata, write_n5_metadata
+from .metadata import (validate_affine, validate_attributes,
+                       write_h5_metadata, write_xml_metadata, write_n5_metadata)
 from .downsample import downsample
 from .dtypes import convert_to_bdv_dtype, get_new_dtype
 
@@ -146,14 +147,14 @@ def convert_to_bdv(input_path, input_key, output_path,
                    downscale_factors=None, downscale_mode='nearest',
                    resolution=[1., 1., 1.], unit='pixel',
                    setup_id=None, timepoint=0,
-                   setup_name=None, affine=None,
+                   setup_name=None, affine=None, attributes={'channel': None},
                    convert_dtype=None, chunks=None, n_threads=1):
     """ Convert hdf5 volume to BigDatViewer format.
 
     Optionally downscale the input volume and write it
     to BigDataViewer scale pyramid.
 
-    Args:
+    Arguments:
         input_path (str): path to hdf5 input volume
         input_key (str): path in hdf5 input file
         output_path (str): output path to bdv file
@@ -171,6 +172,9 @@ def convert_to_bdv(input_path, input_key, output_path,
             Can either be a list for a single transformation or a dictionary for multiple transformations.
             Each transformation needs to be given in the bdv convention, i.e. using XYZ axis convention
             unlike the other parameters of pybdv, that expect ZYX axis convention. (default: None)
+        attributes (dict[str, int]): attributes associated with the view setups. Expects a dictionary
+            that gives the id for each attribute name. If the id is None,
+            it will be increased from the current highest id. (default: {'channel': None})
         convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
             This will map unsigned types to signed and fail if the value range is too large. (default: None)
         chunks (tuple): chunks for the output dataset.
@@ -193,6 +197,9 @@ def convert_to_bdv(input_path, input_key, output_path,
     data_path, xml_path, is_h5 = normalize_output_path(output_path)
     setup_id = handle_setup_id(setup_id, data_path, is_h5, timepoint)
 
+    # validate the attributes
+    attributes_ = validate_attributes(xml_path, setup_id, attributes)
+
     # we need to convert the dtype only for the hdf5 based storage
     if convert_dtype is None:
         convert_dtype = is_h5
@@ -212,31 +219,33 @@ def convert_to_bdv(input_path, input_key, output_path,
                               ndim, setup_id, is_h5,
                               n_threads=n_threads, chunks=chunks, timepoint=timepoint)
 
-    # we only need to write the dataset metadata for the
-    # (old) h5 layout
+    # write the format specific metadata in the output container
     if is_h5:
         write_h5_metadata(data_path, factors, setup_id, timepoint)
     else:
         write_n5_metadata(data_path, factors, resolution, setup_id, timepoint)
+
     # write bdv xml metadata
     write_xml_metadata(xml_path, data_path, unit,
                        resolution, is_h5,
                        setup_id=setup_id,
                        timepoint=timepoint,
                        setup_name=setup_name,
-                       affine=affine)
+                       affine=affine,
+                       attributes=attributes_)
 
 
 def make_bdv(data, output_path,
              downscale_factors=None, downscale_mode='nearest',
              resolution=[1., 1., 1.], unit='pixel',
-             setup_id=None, timepoint=0, setup_name=None, affine=None,
+             setup_id=None, timepoint=0, setup_name=None,
+             affine=None, attributes={'channel': None},
              convert_dtype=None, chunks=None, n_threads=1):
-    """ Write data to BigDatViewer format.
+    """ Write data in BigDatViewer file format for one view setup and timepoint.
 
-    Optionally downscale the input data to BigDataViewer scale pyramid.
+    Optionally downscale the input data to multi-scale image pyramid.
 
-    Args:
+    Arguments:
         data (np.ndarray): input data
         output_path (str): output path to bdv file
         downscale_factors (tuple or list): factors tused to create multi-scale pyramid.
@@ -253,6 +262,9 @@ def make_bdv(data, output_path,
             Can either be a list for a single transformation or a dictionary for multiple transformations.
             Each transformation needs to be given in the bdv convention, i.e. using XYZ axis convention
             unlike the other parameters of pybdv, that expect ZYX axis convention. (default: None)
+        attributes (dict[str, int]): attributes associated with the view setups. Expects a dictionary
+            that gives the id for each attribute name. If the id is None,
+            it will be increased from the current highest id. (default: {'channel': None})
         convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
             This will map unsigned types to signed and fail if the value range is too large. (default: None)
         chunks (tuple): chunks for the output dataset.
@@ -270,6 +282,9 @@ def make_bdv(data, output_path,
 
     data_path, xml_path, is_h5 = normalize_output_path(output_path)
     setup_id = handle_setup_id(setup_id, data_path, is_h5, timepoint)
+
+    # validate the attributes
+    attributes_ = validate_attributes(xml_path, setup_id, attributes)
 
     # we need to convert the dtype only for the hdf5 based storage
     if convert_dtype is None:
@@ -303,16 +318,17 @@ def make_bdv(data, output_path,
                               ndim, setup_id, is_h5,
                               n_threads=n_threads, chunks=chunks, timepoint=timepoint)
 
-    # we only need to write the dataset metadata for the
-    # (old) h5 layout
+    # write the format specific metadata in the output container
     if is_h5:
         write_h5_metadata(data_path, factors, setup_id, timepoint)
     else:
         write_n5_metadata(data_path, factors, resolution, setup_id, timepoint)
+
     # write bdv xml metadata
     write_xml_metadata(xml_path, data_path, unit,
                        resolution, is_h5,
                        setup_id=setup_id,
                        timepoint=timepoint,
                        setup_name=setup_name,
-                       affine=affine)
+                       affine=affine,
+                       attributes=attributes_)

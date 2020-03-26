@@ -5,6 +5,7 @@ import json
 from pybdv import convert_to_bdv
 
 
+# TODO update the arguments
 def main():
     parser = argparse.ArgumentParser(description='Convert hdf5 dataset to bigdataviewer format.')
     parser.add_argument('input_path', type=str,

@@ -27,10 +27,9 @@ def indent_xml(elem, level=0):
 #
 
 
-# TODO types of views (right now, we only support multiple channels)
+# TODO write the attributes!
 def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
-                       setup_id=0, timepoint=0,
-                       setup_name=None, affine=None):
+                       setup_id, timepoint, setup_name, affine, attributes):
     """ Write bigdataviewer xml.
 
     Based on https://github.com/tlambert03/imarispy/blob/master/imarispy/bdv.py.
@@ -44,6 +43,7 @@ def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
         timepoint (int): id of the time-point (default: None)
         setup_name (str): name of this set-up (default: None)
         affine (list[int] or dict[list[int]]): affine transformations for the view set-up (default: None)
+        attributes (dict[str, int]): view setup attributes
     """
     # number of timepoints hard-coded to 1
     setup_name = 'Setup%i' % setup_id if setup_name is None else setup_name
@@ -67,7 +67,6 @@ def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
         # load the view descriptions
         viewsets = seqdesc.find('ViewSetups')
 
-        # NOTE we only suport channel for now
         # load the attributes setup
         attrsets = viewsets.find('Attributes')
 
@@ -232,6 +231,19 @@ def write_n5_metadata(path, scale_factors, resolution, setup_id=0, timepoint=0):
             ds = g['s%i' % scale_id]
             effective_scale = [eff * sf for eff, sf in zip(effective_scale, factor)]
             ds.attrs['downsamplingFactors'] = factor
+
+
+#
+# helper functions to support attributes
+#
+
+def validate_attributes(xml_path, setup_id, attributes):
+    if os.path.exists(xml_path):
+        # TODO
+        # validate the attributes and increase None's
+        return attributes
+    else:
+        return {k: 0 if v is None else v for k, v in attributes.items()}
 
 
 #
