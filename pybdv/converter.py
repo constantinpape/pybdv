@@ -11,11 +11,11 @@ from .downsample import downsample
 from .dtypes import convert_to_bdv_dtype, get_new_dtype
 
 
-def handle_setup_id(setup_id, h5_path, is_h5, timepoint):
+def handle_setup_id(setup_id, data_path, is_h5, timepoint):
 
     # get the existing setup ids
-    if os.path.exists(h5_path):
-        with open_file(h5_path, 'r') as f:
+    if os.path.exists(data_path):
+        with open_file(data_path, 'r') as f:
             if is_h5:
                 tp_key = 't%05i' % timepoint
                 if tp_key in f:
@@ -96,26 +96,26 @@ def normalize_output_path(output_path):
     base_path, ext = os.path.splitext(output_path)
     is_h5 = True
     if ext == '':
-        h5_path = output_path + '.h5'
+        data_path = output_path + '.h5'
         xml_path = output_path + '.xml'
     elif ext.lower() in HDF5_EXTENSIONS:
-        h5_path = output_path
+        data_path = output_path
         xml_path = base_path + '.xml'
     elif ext.lower() in XML_EXTENSIONS:
-        h5_path = base_path + '.h5'
+        data_path = base_path + '.h5'
         xml_path = output_path
     elif ext.lower() in N5_EXTENSIONS:
         if not HAVE_ELF:
             raise ValueError("Can only write n5 with elf.")
-        h5_path = output_path
+        data_path = output_path
         xml_path = base_path + '.xml'
         is_h5 = False
     else:
         raise ValueError("File extension %s not supported" % ext)
-    return h5_path, xml_path, is_h5
+    return data_path, xml_path, is_h5
 
 
-def make_scales(h5_path, downscale_factors, downscale_mode,
+def make_scales(data_path, downscale_factors, downscale_mode,
                 ndim, setup_id, is_h5,
                 chunks=None, n_threads=1, timepoint=0):
     ds_modes = ('nearest', 'mean', 'max', 'min', 'interpolate')
@@ -135,7 +135,7 @@ def make_scales(h5_path, downscale_factors, downscale_mode,
         in_key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=scale)
         out_key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=scale + 1)
         print("Downsample scale %i / %i" % (scale + 1, len(factors)))
-        downsample(h5_path, in_key, out_key, factor, downscale_mode, n_threads)
+        downsample(data_path, in_key, out_key, factor, downscale_mode, n_threads)
 
     # add first level to factors
     factors = [[1, 1, 1]] + factors
@@ -190,8 +190,8 @@ def convert_to_bdv(input_path, input_key, output_path,
     if affine is not None:
         validate_affine(affine)
 
-    h5_path, xml_path, is_h5 = normalize_output_path(output_path)
-    setup_id = handle_setup_id(setup_id, h5_path, is_h5, timepoint)
+    data_path, xml_path, is_h5 = normalize_output_path(output_path)
+    setup_id = handle_setup_id(setup_id, data_path, is_h5, timepoint)
 
     # we need to convert the dtype only for the hdf5 based storage
     if convert_dtype is None:
@@ -200,7 +200,7 @@ def convert_to_bdv(input_path, input_key, output_path,
     # copy the initial dataset
     base_key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=0)
     copy_dataset(input_path, input_key,
-                 h5_path, base_key, is_h5, convert_dtype=convert_dtype,
+                 data_path, base_key, is_h5, convert_dtype=convert_dtype,
                  chunks=chunks, n_threads=n_threads)
 
     # downsample if needed
@@ -208,18 +208,18 @@ def convert_to_bdv(input_path, input_key, output_path,
         # set single level downscale factor
         factors = [[1, 1, 1]]
     else:
-        factors = make_scales(h5_path, downscale_factors, downscale_mode,
+        factors = make_scales(data_path, downscale_factors, downscale_mode,
                               ndim, setup_id, is_h5,
                               n_threads=n_threads, chunks=chunks, timepoint=timepoint)
 
     # we only need to write the dataset metadata for the
     # (old) h5 layout
     if is_h5:
-        write_h5_metadata(h5_path, factors, setup_id, timepoint)
+        write_h5_metadata(data_path, factors, setup_id, timepoint)
     else:
-        write_n5_metadata(h5_path, factors, resolution, setup_id, timepoint)
+        write_n5_metadata(data_path, factors, resolution, setup_id, timepoint)
     # write bdv xml metadata
-    write_xml_metadata(xml_path, h5_path, unit,
+    write_xml_metadata(xml_path, data_path, unit,
                        resolution, is_h5,
                        setup_id=setup_id,
                        timepoint=timepoint,
@@ -268,8 +268,8 @@ def make_bdv(data, output_path,
     if affine is not None:
         validate_affine(affine)
 
-    h5_path, xml_path, is_h5 = normalize_output_path(output_path)
-    setup_id = handle_setup_id(setup_id, h5_path, is_h5, timepoint)
+    data_path, xml_path, is_h5 = normalize_output_path(output_path)
+    setup_id = handle_setup_id(setup_id, data_path, is_h5, timepoint)
 
     # we need to convert the dtype only for the hdf5 based storage
     if convert_dtype is None:
@@ -287,7 +287,7 @@ def make_bdv(data, output_path,
 
     # write initial dataset
     base_key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=0)
-    with open_file(h5_path, 'a') as f:
+    with open_file(data_path, 'a') as f:
         ds = f.create_dataset(base_key, shape=data.shape, compression='gzip',
                               chunks=chunks_, dtype=data.dtype)
         # if we have z5py, this will trigger multi-threaded write (otherwise no effect)
@@ -299,18 +299,18 @@ def make_bdv(data, output_path,
         # set single level downscale factor
         factors = [[1, 1, 1]]
     else:
-        factors = make_scales(h5_path, downscale_factors, downscale_mode,
+        factors = make_scales(data_path, downscale_factors, downscale_mode,
                               ndim, setup_id, is_h5,
                               n_threads=n_threads, chunks=chunks, timepoint=timepoint)
 
     # we only need to write the dataset metadata for the
     # (old) h5 layout
     if is_h5:
-        write_h5_metadata(h5_path, factors, setup_id, timepoint)
+        write_h5_metadata(data_path, factors, setup_id, timepoint)
     else:
-        write_n5_metadata(h5_path, factors, resolution, setup_id, timepoint)
+        write_n5_metadata(data_path, factors, resolution, setup_id, timepoint)
     # write bdv xml metadata
-    write_xml_metadata(xml_path, h5_path, unit,
+    write_xml_metadata(xml_path, data_path, unit,
                        resolution, is_h5,
                        setup_id=setup_id,
                        timepoint=timepoint,
