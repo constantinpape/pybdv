@@ -29,7 +29,7 @@ def indent_xml(elem, level=0):
 
 # TODO types of views (right now, we only support multiple channels)
 def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
-                       setup_id=0, time_point=0,
+                       setup_id=0, timepoint=0,
                        setup_name=None, affine=None):
     """ Write bigdataviewer xml.
 
@@ -41,13 +41,13 @@ def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
         resolution (str): resolution / voxel size of the data at the original scale
         is_h5 (bool): is the data in h5 or n5 format
         setup_id (int): id of the set-up (default: None)
-        time_point (int): id of the time-point (default: None)
+        timepoint (int): id of the time-point (default: None)
         setup_name (str): name of this set-up (default: None)
         affine (list[int] or dict[list[int]]): affine transformations for the view set-up (default: None)
     """
     # number of timepoints hard-coded to 1
     setup_name = 'Setup%i' % setup_id if setup_name is None else setup_name
-    key = get_key(is_h5, time_point=0, setup_id=setup_id, scale=0)
+    key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=0)
     with open_file(data_path, 'r') as f:
         shape = f[key].shape
     nz, ny, nx = tuple(shape)
@@ -77,9 +77,9 @@ def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
         # update the timepoint descriptions
         tpoints = seqdesc.find('Timepoints')
         first = tpoints.find('first')
-        first.text = str(min(int(first.text), time_point))
+        first.text = str(min(int(first.text), timepoint))
         last = tpoints.find('last')
-        last.text = str(max(int(last.text), time_point))
+        last.text = str(max(int(last.text), timepoint))
 
     # -> no we don't have an xml
     else:
@@ -111,8 +111,8 @@ def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
         # timepoint description
         tpoints = ET.SubElement(seqdesc, 'Timepoints')
         tpoints.set('type', 'range')
-        ET.SubElement(tpoints, 'first').text = str(time_point)
-        ET.SubElement(tpoints, 'last').text = str(time_point)
+        ET.SubElement(tpoints, 'first').text = str(timepoint)
+        ET.SubElement(tpoints, 'last').text = str(timepoint)
 
     # parse the resolution and offsets
     dz, dy, dx = resolution
@@ -136,15 +136,15 @@ def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
     ET.SubElement(chan, 'name').text = str(setup_id)
 
     if affine is None:
-        _write_default_affine(vregs, setup_id, time_point, dx, dy, dz)
+        _write_default_affine(vregs, setup_id, timepoint, dx, dy, dz)
     else:
-        _write_affine(vregs, setup_id, time_point, affine)
+        _write_affine(vregs, setup_id, timepoint, affine)
     indent_xml(root)
     tree = ET.ElementTree(root)
     tree.write(xml_path)
 
 
-def write_h5_metadata(path, scale_factors, setup_id=0):
+def write_h5_metadata(path, scale_factors, setup_id=0, timepoint=0):
     effective_scale = [1, 1, 1]
 
     # scale factors and chunks
@@ -160,7 +160,7 @@ def write_h5_metadata(path, scale_factors, setup_id=0):
             effective_scale = [eff * sf for sf, eff in zip(scale_factor, effective_scale)]
 
         # get the chunk size for this level
-        out_key = get_key(True, time_point=0, setup_id=setup_id, scale=scale)
+        out_key = get_key(True, timepoint=timepoint, setup_id=setup_id, scale=scale)
         with open_file(path, 'r') as f:
             # for some reason I don't understand we do not need to invert here
             chunk = f[out_key].chunks[::-1]
@@ -177,7 +177,7 @@ def write_h5_metadata(path, scale_factors, setup_id=0):
 
 # n5 metadata format is specified here:
 # https://github.com/bigdataviewer/bigdataviewer-core/blob/master/BDV%20N5%20format.md
-def write_n5_metadata(path, scale_factors, resolution, setup_id=0):
+def write_n5_metadata(path, scale_factors, resolution, setup_id=0, timepoint=0):
     # build the effective scale factors
     effective_scales = [scale_factors[0]]
     for factor in scale_factors[1:]:
@@ -185,7 +185,7 @@ def write_n5_metadata(path, scale_factors, resolution, setup_id=0):
                                  for eff, fac in zip(effective_scales[-1], factor[::-1])])
 
     with open_file(path) as f:
-        key = get_key(False, time_point=0, setup_id=setup_id, scale=0)
+        key = get_key(False, timepoint=timepoint, setup_id=setup_id, scale=0)
         dtype = str(f[key].dtype)
 
         root_key = get_key(False, setup_id=setup_id)
@@ -193,7 +193,7 @@ def write_n5_metadata(path, scale_factors, resolution, setup_id=0):
         root.attrs['downsamplingFactors'] = effective_scales
         root.attrs['dataType'] = dtype
 
-        group_key = get_key(False, time_point=0, setup_id=setup_id)
+        group_key = get_key(False, timepoint=timepoint, setup_id=setup_id)
         g = f[group_key]
         g.attrs['multiScale'] = True
         g.attrs['resolution'] = resolution[::-1]
@@ -227,9 +227,9 @@ def validate_affine(affine):
         raise ValueError("Invalid type for affine transformatin, expect list or dict, got %s" % type(affine))
 
 
-def _write_default_affine(vregs, setup_id, time_point, dx, dy, dz):
+def _write_default_affine(vregs, setup_id, timepoint, dx, dy, dz):
     vreg = ET.SubElement(vregs, 'ViewRegistration')
-    vreg.set('timepoint', str(time_point))
+    vreg.set('timepoint', str(timepoint))
     vreg.set('setup', str(setup_id))
     vt = ET.SubElement(vreg, 'ViewTransform')
     vt.set('type', 'affine')
@@ -239,9 +239,9 @@ def _write_default_affine(vregs, setup_id, time_point, dx, dy, dz):
                                                                                           dz, oz)
 
 
-def _write_affine(vregs, setup_id, time_point, affine):
+def _write_affine(vregs, setup_id, timepoint, affine):
     vreg = ET.SubElement(vregs, 'ViewRegistration')
-    vreg.set('timepoint', str(time_point))
+    vreg.set('timepoint', str(timepoint))
     vreg.set('setup', str(setup_id))
     if isinstance(affine, list):
         vt = ET.SubElement(vreg, 'ViewTransform')
@@ -255,13 +255,13 @@ def _write_affine(vregs, setup_id, time_point, affine):
             ET.SubElement(vt, 'Name').text = name
 
 
-def get_affine(xml_path, setup_id, time_point=0):
+def get_affine(xml_path, setup_id, timepoint=0):
     """ Get affine transformation for given setup id from xml.
 
     Arguments:
         xml_path (str): path to the xml file with the metadata
         setup_id (int): setup id for which the affine trafo(s) should be loaded
-        time_point (int): time point for which to load the affine (default: 0)
+        timepoint (int): time point for which to load the affine (default: 0)
     Returns:
         dict: mapping name of transformation to its parameters
             If transformation does not have a name, will be called 'affine%i',
@@ -273,7 +273,7 @@ def get_affine(xml_path, setup_id, time_point=0):
     for vreg in vregs.findall('ViewRegistration'):
         setup = int(vreg.attrib['setup'])
         tp = int(vreg.attrib('timepoint'))
-        if (setup != setup_id) or (time_point != tp):
+        if (setup != setup_id) or (timepoint != tp):
             continue
 
         ii = 0
@@ -290,12 +290,25 @@ def get_affine(xml_path, setup_id, time_point=0):
             ii += 1
         return affine
 
-    raise RuntimeError("Could not find setup %i and timepoint %i" % (setup_id, time_point))
+    raise RuntimeError("Could not find setup %i and timepoint %i" % (setup_id, timepoint))
 
 
 #
 # helper functions to read attributes from the xml metadata
 #
+
+def get_time_range(xml_path):
+    """ Get the first and last timepoint present.
+
+    Arguments:
+        xml_path (str): path to the xml file with the metadata
+    """
+    root = ET.parse(xml_path).getroot()
+    seqdesc = root.find('SequenceDescription')
+    tpoints = seqdesc.find('Timepoints')
+    first = int(tpoints.find('first').text)
+    last = int(tpoints.find('last').text)
+    return first, last
 
 
 def get_bdv_format(xml_path):
