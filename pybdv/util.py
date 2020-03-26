@@ -62,9 +62,12 @@ def blocking(shape, block_shape):
                                                      min_coords, max_coords))
 
 
-def get_nblocks(shape, block_shape):
-    n_blocks = [sh // bs + int((sh % bs) != 0)
-                for sh, bs in zip(shape, block_shape)]
+def get_nblocks(shape, block_shape, add_incomplete_blocks=False):
+    if add_incomplete_blocks:
+        n_blocks = [sh // bs + int((sh % bs) != 0)
+                    for sh, bs in zip(shape, block_shape)]
+    else:
+        n_blocks = [sh // bs for sh, bs in zip(shape, block_shape)]
     return np.prod(n_blocks)
 
 

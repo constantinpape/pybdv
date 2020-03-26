@@ -1,25 +1,30 @@
 import os
 import unittest
+from abc import ABC
 from shutil import rmtree
 
 import numpy as np
-import h5py
+from pybdv.util import get_key
 
 try:
     from elf.io import open_file
+    WITH_ELF = True
 except ImportError:
-    open_file = None
+    import h5py
+    open_file = h5py.File
+    WITH_ELF = False
 
 
-# TODO make base test and then different tests for
-# the formats: bdv.hdf5, bdv.n5 and eventually bdv.s3.n5
-class TestMakeBdv(unittest.TestCase):
+class MakeBdvTestMixin(ABC):
+    tmp_folder = './tmp'
+    xml_path = './tmp/test.xml'
+
     def setUp(self):
-        os.makedirs('./tmp', exist_ok=True)
+        os.makedirs(self.tmp_folder, exist_ok=True)
 
     def tearDown(self):
         try:
-            rmtree('./tmp')
+            rmtree(self.tmp_folder)
         except OSError:
             pass
 
@@ -27,12 +32,11 @@ class TestMakeBdv(unittest.TestCase):
         from pybdv import make_bdv
         data = np.random.rand(*shape).astype('float32')
 
-        out_path = './tmp/test.h5'
-        make_bdv(data, out_path, affine=affine)
+        make_bdv(data, self.out_path, affine=affine)
 
-        key = 't00000/s00/0/cells'
-        self.assertTrue(os.path.exists(out_path))
-        with h5py.File(out_path, 'r') as f:
+        key = get_key(self.is_h5, timepoint=0, setup_id=0, scale=0)
+        self.assertTrue(os.path.exists(self.out_path))
+        with open_file(self.out_path, 'r') as f:
             self.assertTrue(key in f)
             ds = f[key]
             self.assertEqual(ds.shape, shape)
@@ -49,7 +53,7 @@ class TestMakeBdv(unittest.TestCase):
         affine = np.random.rand(12).tolist()
         affine = [round(aff, 4) for aff in affine]
         self._test_simple(shape, affine)
-        affine_out = get_affine('./tmp/test.xml', 0)['affine0']
+        affine_out = get_affine(self.xml_path, 0)['affine0']
         self.assertEqual(affine, affine_out)
 
     def test_multi_setup(self):
@@ -57,7 +61,6 @@ class TestMakeBdv(unittest.TestCase):
         from pybdv.metadata import get_affine
         shape = (64,) * 3
         n_views = 2
-        out_path = './tmp/test.h5'
 
         data_dict = {}
         affine_dict = {}
@@ -66,18 +69,18 @@ class TestMakeBdv(unittest.TestCase):
             data = np.random.rand(*shape).astype('float32')
             affine = {'trafo1': [round(aff, 4) for aff in np.random.rand(12)],
                       'trafo2': [round(aff, 4) for aff in np.random.rand(12)]}
-            make_bdv(data, out_path, setup_id=vid, affine=affine)
+            make_bdv(data, self.out_path, setup_id=vid, affine=affine)
             data_dict[vid] = data
             affine_dict[vid] = affine
 
         # check implicit setup id
         data = np.random.rand(*shape).astype('float32')
-        make_bdv(data, out_path)
+        make_bdv(data, self.out_path)
         data_dict[n_views] = data
 
-        with h5py.File(out_path, 'r') as f:
+        with open_file(self.out_path, 'r') as f:
             for vid in range(n_views + 1):
-                expected_key = 't00000/s%02i/0/cells' % vid
+                expected_key = get_key(self.is_h5, timepoint=0, setup_id=vid, scale=0)
                 self.assertTrue(expected_key in f)
 
                 exp_data = data_dict[vid]
@@ -85,10 +88,9 @@ class TestMakeBdv(unittest.TestCase):
                 self.assertTrue(np.allclose(data, exp_data))
 
         # check affine trafos (only for explicit setup-ids)
-        xml_path = './tmp/test.xml'
         for vid in range(n_views):
             affine = affine_dict[vid]
-            affine_out = get_affine(xml_path, vid)
+            affine_out = get_affine(self.xml_path, vid)
             self.assertEqual(affine, affine_out)
 
     def test_multi_timepoint(self):
@@ -97,26 +99,24 @@ class TestMakeBdv(unittest.TestCase):
 
         n_timepoints = 4
         shape = (64,) * 3
-        out_path = './tmp/test.h5'
 
         tp_data = []
         tp_setups = []
         for tp in range(n_timepoints):
             data = np.random.rand(*shape)
             setup_id = np.random.randint(0, 10)
-            make_bdv(data, out_path, setup_id=setup_id, timepoint=tp)
+            make_bdv(data, self.out_path, setup_id=setup_id, timepoint=tp)
             tp_data.append(data)
             tp_setups.append(setup_id)
 
-        xml_path = './tmp/test.xml'
-        tstart, tstop = get_time_range(xml_path)
+        tstart, tstop = get_time_range(self.xml_path)
         self.assertEqual(tstart, 0)
         self.assertEqual(tstop, n_timepoints - 1)
 
-        with h5py.File(out_path, 'r') as f:
+        with open_file(self.out_path, 'r') as f:
             for tp in range(n_timepoints):
                 setup_id = tp_setups[tp]
-                tp_key = 't0000%i/s0%i/0/cells' % (tp, setup_id)
+                tp_key = get_key(self.is_h5, timepoint=tp, setup_id=setup_id, scale=0)
                 data = f[tp_key][:]
                 data_exp = tp_data[tp]
                 self.assertTrue(np.allclose(data, data_exp))
@@ -125,18 +125,17 @@ class TestMakeBdv(unittest.TestCase):
         from pybdv import make_bdv
         data = np.random.rand(*shape).astype('float32')
 
-        out_path = './tmp/test.h5'
         n_scales = 4
         ndim = len(shape)
         downscale_factors = n_scales * [[2] * ndim]
-        make_bdv(data, out_path, downscale_factors,
+        make_bdv(data, self.out_path, downscale_factors,
                  downscale_mode=mode)
 
         exp_shape = shape
-        self.assertTrue(os.path.exists(out_path))
-        with h5py.File(out_path, 'r') as f:
+        self.assertTrue(os.path.exists(self.out_path))
+        with open_file(self.out_path, 'r') as f:
             for scale in range(n_scales):
-                key = 't00000/s00/%i/cells' % scale
+                key = get_key(self.is_h5, timepoint=0, setup_id=0, scale=scale)
                 self.assertTrue(key in f)
                 ds = f[key]
                 self.assertEqual(ds.shape, exp_shape)
@@ -152,16 +151,19 @@ class TestMakeBdv(unittest.TestCase):
         self._test_ds(shape, 'mean')
 
     def test_dtype(self):
+        if not self.is_h5:
+            return
+
         from pybdv import make_bdv
         shape = (128,) * 3
 
         val = np.iinfo('uint16').max + 1
         data = np.full(shape, val, dtype='uint32')
 
-        out_path = './tmp/test.h5'
-        make_bdv(data, out_path, convert_dtype=False)
-        with h5py.File(out_path, 'r') as f:
-            d = f['t00000/s00/0/cells'][:]
+        make_bdv(data, self.out_path, convert_dtype=False)
+        with open_file(self.out_path, 'r') as f:
+            key = get_key(self.is_h5, timepoint=0, setup_id=0, scale=0)
+            d = f[key][:]
         self.assertTrue(np.array_equal(d, data))
 
         with self.assertRaises(RuntimeError):
@@ -170,47 +172,44 @@ class TestMakeBdv(unittest.TestCase):
     def test_custom_chunks(self):
         from pybdv import make_bdv
         shape = (128,) * 3
-        chunks = (64,) * 3
+        chunks = (64, 42, 59)
 
-        out_path = './tmp/test.h5'
         data = np.random.rand(*shape)
-        make_bdv(data, out_path, chunks=chunks)
+        make_bdv(data, self.out_path, chunks=chunks)
 
-        with h5py.File(out_path, 'r') as f:
-            d = f['t00000/s00/0/cells'][:]
+        key = get_key(self.is_h5, timepoint=0, setup_id=0, scale=0)
+        with open_file(self.out_path, 'r') as f:
+            ds = f[key]
+            chunks_out = ds.chunks
+            d = ds[:]
+            self.assertEqual(chunks, chunks_out)
         self.assertTrue(np.allclose(d, data))
 
-    @unittest.skipIf(open_file is None, "Need elf for n5 support")
-    def test_n5(self):
-        from pybdv import make_bdv
-        shape = (128,) * 3
-        chunks = (64,) * 3
-
-        out_path = './tmp/test.n5'
-        data = np.random.rand(*shape)
-        make_bdv(data, out_path, chunks=chunks)
-
-        with open_file(out_path, 'r') as f:
-            d = f['setup0/timepoint0/s0'][:]
-        self.assertTrue(np.allclose(d, data))
-
-    @unittest.skipIf(open_file is None, "Need elf for n5 support")
     def test_multi_threaded(self):
         from pybdv import make_bdv
-        from pybdv.util import get_key
         shape = (128,) * 3
         chunks = (64,) * 3
 
-        out_paths = ['./tmp/test.h5', './tmp/test.n5']
         data = np.random.rand(*shape)
         scale_factors = 2 * [[2, 2, 2]]
-        for out_path, is_h5 in zip(out_paths, (True, False)):
-            make_bdv(data, out_path, chunks=chunks,
-                     n_threads=4, downscale_factors=scale_factors)
-            key = get_key(is_h5, timepoint=0, setup_id=0, scale=0)
-            with open_file(out_path, 'r') as f:
-                d = f[key][:]
-            self.assertTrue(np.allclose(d, data))
+
+        make_bdv(data, self.out_path, chunks=chunks,
+                 n_threads=4, downscale_factors=scale_factors)
+        key = get_key(self.is_h5, timepoint=0, setup_id=0, scale=0)
+        with open_file(self.out_path, 'r') as f:
+            d = f[key][:]
+        self.assertTrue(np.allclose(d, data))
+
+
+class TestMakeBdvH5(MakeBdvTestMixin, unittest.TestCase):
+    out_path = './tmp/test.h5'
+    is_h5 = True
+
+
+@unittest.skipUnless(WITH_ELF, "Need elf for n5 support")
+class TestMakeBdvN5(MakeBdvTestMixin, unittest.TestCase):
+    out_path = './tmp/test.n5'
+    is_h5 = False
 
 
 if __name__ == '__main__':
