@@ -26,7 +26,8 @@ def handle_setup_id(setup_id, h5_path, is_h5, timepoint):
                     setup_ids = []
             else:
                 setup_ids = [key for key in f.keys()
-                             if (key.startswith('setup') and timepoint in f[key])]
+                             if (key.startswith('setup') and
+                                 'timepoint%i' % timepoint in f[key])]
                 setup_ids = [int(sid[5:]) for sid in setup_ids]
     else:
         setup_ids = [-1]
@@ -45,7 +46,7 @@ def handle_setup_id(setup_id, h5_path, is_h5, timepoint):
     return setup_id
 
 
-def copy_dataset(input_path, input_key, output_path, output_key,
+def copy_dataset(input_path, input_key, output_path, output_key, is_h5,
                  convert_dtype=False, chunks=None, n_threads=1):
 
     with open_file(input_path, 'r') as f_in, open_file(output_path, 'a') as f_out:
@@ -55,7 +56,7 @@ def copy_dataset(input_path, input_key, output_path, output_key,
 
         # validate chunks
         if chunks is None:
-            chunks_ = True
+            chunks_ = True if is_h5 else None
         else:
             chunks_ = tuple(min(ch, sh) for sh, ch in zip(shape, chunks))
 
@@ -199,7 +200,7 @@ def convert_to_bdv(input_path, input_key, output_path,
     # copy the initial dataset
     base_key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=0)
     copy_dataset(input_path, input_key,
-                 h5_path, base_key, convert_dtype=convert_dtype,
+                 h5_path, base_key, is_h5, convert_dtype=convert_dtype,
                  chunks=chunks, n_threads=n_threads)
 
     # downsample if needed
@@ -277,9 +278,9 @@ def make_bdv(data, output_path,
     if convert_dtype:
         data = convert_to_bdv_dtype(data)
 
-    # validate chunks
+    # set proper chunks
     if chunks is None:
-        chunks_ = True
+        chunks_ = True if is_h5 else None
     else:
         shape = data.shape
         chunks_ = tuple(min(ch, sh) for sh, ch in zip(shape, chunks))
