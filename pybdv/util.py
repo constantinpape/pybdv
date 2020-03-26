@@ -19,11 +19,11 @@ XML_EXTENSIONS = ['.xml']
 N5_EXTENSIONS = ['.n5']
 
 
-def get_key(is_h5, time_point=None, setup_id=None, scale=None):
+def get_key(is_h5, timepoint=None, setup_id=None, scale=None):
     sequence = []
     if is_h5:
-        if time_point is not None:
-            sequence.append('t%05i' % time_point)
+        if timepoint is not None:
+            sequence.append('t%05i' % timepoint)
         if setup_id is not None:
             sequence.append('s%02i' % setup_id)
         if scale is not None:
@@ -31,8 +31,8 @@ def get_key(is_h5, time_point=None, setup_id=None, scale=None):
     else:
         if setup_id is not None:
             sequence.append('setup%i' % setup_id)
-        if time_point is not None:
-            sequence.append('timepoint%i' % time_point)
+        if timepoint is not None:
+            sequence.append('timepoint%i' % timepoint)
         if scale is not None:
             sequence.append('s%i' % scale)
     return '/'.join(sequence)
@@ -78,10 +78,10 @@ def grow_bounding_box(bb, halo, shape):
     return bb_grown, bb_local
 
 
-def get_number_of_scales(path, time_point, setup_id):
+def get_number_of_scales(path, timepoint, setup_id):
     ext = os.path.splitext(path)[1]
     is_h5 = ext in HDF5_EXTENSIONS
-    key = get_key(is_h5, time_point, setup_id)
+    key = get_key(is_h5, timepoint, setup_id)
     with open_file(path, 'r') as f:
         n_scales = len(f[key])
     return n_scales
@@ -97,7 +97,7 @@ def get_scale_factors(path, setup_id):
             ds = f[key]
             scale_factors = ds[:].tolist()
         else:
-            key = get_key(is_h5, time_point=None, setup_id=setup_id)
+            key = get_key(is_h5, timepoint=None, setup_id=setup_id)
             scale_factors = f[key].attrs['downsamplingFactors']
 
     # need to switch from XYZ to ZYX

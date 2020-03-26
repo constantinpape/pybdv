@@ -11,6 +11,8 @@ except ImportError:
     open_file = None
 
 
+# TODO make base test and then different tests for
+# the formats: bdv.hdf5, bdv.n5 and eventually bdv.s3.n5
 class TestMakeBdv(unittest.TestCase):
     def setUp(self):
         os.makedirs('./tmp', exist_ok=True)
@@ -88,6 +90,36 @@ class TestMakeBdv(unittest.TestCase):
             affine = affine_dict[vid]
             affine_out = get_affine(xml_path, vid)
             self.assertEqual(affine, affine_out)
+
+    def test_multi_timepoint(self):
+        from pybdv import make_bdv
+        from pybdv.metadata import get_time_range
+
+        n_timepoints = 4
+        shape = (64,) * 3
+        out_path = './tmp/test.h5'
+
+        tp_data = []
+        tp_setups = []
+        for tp in range(n_timepoints):
+            data = np.random.rand(*shape)
+            setup_id = np.random.randint(0, 10)
+            make_bdv(data, out_path, setup_id=setup_id, timepoint=tp)
+            tp_data.append(data)
+            tp_setups.append(setup_id)
+
+        xml_path = './tmp/test.xml'
+        tstart, tstop = get_time_range(xml_path)
+        self.assertEqual(tstart, 0)
+        self.assertEqual(tstop, n_timepoints - 1)
+
+        with h5py.File(out_path, 'r') as f:
+            for tp in range(n_timepoints):
+                setup_id = tp_setups[tp]
+                tp_key = 't0000%i/s0%i/0/cells' % (tp, setup_id)
+                data = f[tp_key][:]
+                data_exp = tp_data[tp]
+                self.assertTrue(np.allclose(data, data_exp))
 
     def _test_ds(self, shape, mode):
         from pybdv import make_bdv
@@ -175,7 +207,7 @@ class TestMakeBdv(unittest.TestCase):
         for out_path, is_h5 in zip(out_paths, (True, False)):
             make_bdv(data, out_path, chunks=chunks,
                      n_threads=4, downscale_factors=scale_factors)
-            key = get_key(is_h5, time_point=0, setup_id=0, scale=0)
+            key = get_key(is_h5, timepoint=0, setup_id=0, scale=0)
             with open_file(out_path, 'r') as f:
                 d = f[key][:]
             self.assertTrue(np.allclose(d, data))

@@ -11,27 +11,35 @@ from .downsample import downsample
 from .dtypes import convert_to_bdv_dtype, get_new_dtype
 
 
-def handle_setup_id(setup_id, h5_path, is_h5):
+def handle_setup_id(setup_id, h5_path, is_h5, timepoint):
 
     # get the existing setup ids
     if os.path.exists(h5_path):
         with open_file(h5_path, 'r') as f:
             if is_h5:
-                setup_ids = list(f['t00000'].keys())
-                setup_ids = [int(sid[1:]) for sid in setup_ids]
+                tp_key = 't%05i' % timepoint
+                if tp_key in f:
+                    g = f[tp_key]
+                    setup_ids = list(g.keys())
+                    setup_ids = [int(sid[1:]) for sid in setup_ids]
+                else:
+                    setup_ids = []
             else:
-                setup_ids = [key for key in f.keys() if key.startswith('setup')]
+                setup_ids = [key for key in f.keys()
+                             if (key.startswith('setup') and timepoint in f[key])]
                 setup_ids = [int(sid[5:]) for sid in setup_ids]
     else:
         setup_ids = [-1]
 
     if setup_id is None:
         setup_id = max(setup_ids) + 1
-    else:
-        if setup_id in setup_ids:
-            overwrite = input("Setup-id %i is alread present. Do you want to over-write it? y / [n]:")
-            if overwrite != 'y':
-                sys.exit(0)
+    elif setup_id in setup_ids:
+        msg = "Setup-id %i exists already for time point %i. Do you want to over-write it? y / [n]:" % (setup_id,
+                                                                                                        timepoint)
+        overwrite = input(msg)
+        if overwrite != 'y':
+            sys.exit(0)
+
     if setup_id >= 100:
         raise ValueError("Only up to 100 set-ups are supported")
     return setup_id
@@ -108,7 +116,7 @@ def normalize_output_path(output_path):
 
 def make_scales(h5_path, downscale_factors, downscale_mode,
                 ndim, setup_id, is_h5,
-                chunks=None, n_threads=1):
+                chunks=None, n_threads=1, timepoint=0):
     ds_modes = ('nearest', 'mean', 'max', 'min', 'interpolate')
     if downscale_mode not in ds_modes:
         raise ValueError("Invalid downscale mode %s, choose one of %s" % downscale_mode, str(ds_modes))
@@ -123,8 +131,8 @@ def make_scales(h5_path, downscale_factors, downscale_mode,
 
     # run single downsampling stages
     for scale, factor in enumerate(factors):
-        in_key = get_key(is_h5, time_point=0, setup_id=setup_id, scale=scale)
-        out_key = get_key(is_h5, time_point=0, setup_id=setup_id, scale=scale + 1)
+        in_key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=scale)
+        out_key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=scale + 1)
         print("Downsample scale %i / %i" % (scale + 1, len(factors)))
         downsample(h5_path, in_key, out_key, factor, downscale_mode, n_threads)
 
@@ -133,11 +141,11 @@ def make_scales(h5_path, downscale_factors, downscale_mode,
     return factors
 
 
-# TODO support multiple time-points
 def convert_to_bdv(input_path, input_key, output_path,
                    downscale_factors=None, downscale_mode='nearest',
                    resolution=[1., 1., 1.], unit='pixel',
-                   setup_id=None, setup_name=None, affine=None,
+                   setup_id=None, timepoint=0,
+                   setup_name=None, affine=None,
                    convert_dtype=None, chunks=None, n_threads=1):
     """ Convert hdf5 volume to BigDatViewer format.
 
@@ -156,6 +164,7 @@ def convert_to_bdv(input_path, input_key, output_path,
         resolution(list or tuple): resolution of the data
         unit (str): unit of measurement
         setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
+        timepoint (int): time point id to write (default: 0)
         setup_name (str): name of this view set-up (default: None)
         affine (list[float] or dict[str, list[float]]): affine view transformation(s) for this setup.
             Can either be a list for a single transformation or a dictionary for multiple transformations.
@@ -181,14 +190,14 @@ def convert_to_bdv(input_path, input_key, output_path,
         validate_affine(affine)
 
     h5_path, xml_path, is_h5 = normalize_output_path(output_path)
-    setup_id = handle_setup_id(setup_id, h5_path, is_h5)
+    setup_id = handle_setup_id(setup_id, h5_path, is_h5, timepoint)
 
     # we need to convert the dtype only for the hdf5 based storage
     if convert_dtype is None:
         convert_dtype = is_h5
 
     # copy the initial dataset
-    base_key = get_key(is_h5, time_point=0, setup_id=setup_id, scale=0)
+    base_key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=0)
     copy_dataset(input_path, input_key,
                  h5_path, base_key, convert_dtype=convert_dtype,
                  chunks=chunks, n_threads=n_threads)
@@ -198,19 +207,21 @@ def convert_to_bdv(input_path, input_key, output_path,
         # set single level downscale factor
         factors = [[1, 1, 1]]
     else:
-        factors = make_scales(h5_path, downscale_factors, downscale_mode, ndim,
-                              setup_id, is_h5, n_threads)
+        factors = make_scales(h5_path, downscale_factors, downscale_mode,
+                              ndim, setup_id, is_h5,
+                              n_threads=n_threads, chunks=chunks, timepoint=timepoint)
 
     # we only need to write the dataset metadata for the
     # (old) h5 layout
     if is_h5:
-        write_h5_metadata(h5_path, factors, setup_id)
+        write_h5_metadata(h5_path, factors, setup_id, timepoint)
     else:
-        write_n5_metadata(h5_path, factors, resolution, setup_id)
+        write_n5_metadata(h5_path, factors, resolution, setup_id, timepoint)
     # write bdv xml metadata
     write_xml_metadata(xml_path, h5_path, unit,
                        resolution, is_h5,
                        setup_id=setup_id,
+                       timepoint=timepoint,
                        setup_name=setup_name,
                        affine=affine)
 
@@ -218,7 +229,7 @@ def convert_to_bdv(input_path, input_key, output_path,
 def make_bdv(data, output_path,
              downscale_factors=None, downscale_mode='nearest',
              resolution=[1., 1., 1.], unit='pixel',
-             setup_id=None, setup_name=None, affine=None,
+             setup_id=None, timepoint=0, setup_name=None, affine=None,
              convert_dtype=None, chunks=None, n_threads=1):
     """ Write data to BigDatViewer format.
 
@@ -235,6 +246,7 @@ def make_bdv(data, output_path,
         resolution(list or tuple): resolution of the data
         unit (str): unit of measurement
         setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
+        timepoint (int): time point id to write (default: 0)
         setup_name (str): name of this view set-up (default: None)
         affine (list[float] or dict[str, list[float]]): affine view transformation(s) for this setup.
             Can either be a list for a single transformation or a dictionary for multiple transformations.
@@ -256,7 +268,7 @@ def make_bdv(data, output_path,
         validate_affine(affine)
 
     h5_path, xml_path, is_h5 = normalize_output_path(output_path)
-    setup_id = handle_setup_id(setup_id, h5_path, is_h5)
+    setup_id = handle_setup_id(setup_id, h5_path, is_h5, timepoint)
 
     # we need to convert the dtype only for the hdf5 based storage
     if convert_dtype is None:
@@ -273,7 +285,7 @@ def make_bdv(data, output_path,
         chunks_ = tuple(min(ch, sh) for sh, ch in zip(shape, chunks))
 
     # write initial dataset
-    base_key = get_key(is_h5, time_point=0, setup_id=setup_id, scale=0)
+    base_key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=0)
     with open_file(h5_path, 'a') as f:
         ds = f.create_dataset(base_key, shape=data.shape, compression='gzip',
                               chunks=chunks_, dtype=data.dtype)
@@ -286,18 +298,20 @@ def make_bdv(data, output_path,
         # set single level downscale factor
         factors = [[1, 1, 1]]
     else:
-        factors = make_scales(h5_path, downscale_factors, downscale_mode, ndim,
-                              setup_id, is_h5, n_threads)
+        factors = make_scales(h5_path, downscale_factors, downscale_mode,
+                              ndim, setup_id, is_h5,
+                              n_threads=n_threads, chunks=chunks, timepoint=timepoint)
 
     # we only need to write the dataset metadata for the
     # (old) h5 layout
     if is_h5:
-        write_h5_metadata(h5_path, factors, setup_id)
+        write_h5_metadata(h5_path, factors, setup_id, timepoint)
     else:
-        write_n5_metadata(h5_path, factors, resolution, setup_id)
+        write_n5_metadata(h5_path, factors, resolution, setup_id, timepoint)
     # write bdv xml metadata
     write_xml_metadata(xml_path, h5_path, unit,
                        resolution, is_h5,
                        setup_id=setup_id,
+                       timepoint=timepoint,
                        setup_name=setup_name,
                        affine=affine)
