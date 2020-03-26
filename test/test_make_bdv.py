@@ -11,6 +11,8 @@ except ImportError:
     open_file = None
 
 
+# TODO make base test and then different tests for
+# the formats: bdv.hdf5, bdv.n5 and eventually bdv.s3.n5
 class TestMakeBdv(unittest.TestCase):
     def setUp(self):
         os.makedirs('./tmp', exist_ok=True)
