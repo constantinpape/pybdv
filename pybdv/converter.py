@@ -189,6 +189,7 @@ def convert_to_bdv(input_path, input_key, output_path,
             raise ValueError("%s not in %s" % (input_key, input_path))
         shape = f[input_key].shape
         ndim = len(shape)
+
     if ndim != 3 or len(resolution) != ndim:
         raise ValueError("Invalid input dimensionality")
     if affine is not None:
@@ -198,7 +199,7 @@ def convert_to_bdv(input_path, input_key, output_path,
     setup_id = handle_setup_id(setup_id, data_path, is_h5, timepoint)
 
     # validate the attributes
-    attributes_ = validate_attributes(xml_path, setup_id, attributes)
+    attributes_ = validate_attributes(xml_path, attributes, setup_id)
 
     # we need to convert the dtype only for the hdf5 based storage
     if convert_dtype is None:
@@ -284,7 +285,7 @@ def make_bdv(data, output_path,
     setup_id = handle_setup_id(setup_id, data_path, is_h5, timepoint)
 
     # validate the attributes
-    attributes_ = validate_attributes(xml_path, setup_id, attributes)
+    attributes_ = validate_attributes(xml_path, attributes, setup_id)
 
     # we need to convert the dtype only for the hdf5 based storage
     if convert_dtype is None:
@@ -297,8 +298,7 @@ def make_bdv(data, output_path,
     if chunks is None:
         chunks_ = True if is_h5 else None
     else:
-        shape = data.shape
-        chunks_ = tuple(min(ch, sh) for sh, ch in zip(shape, chunks))
+        chunks_ = tuple(min(ch, sh) for sh, ch in zip(data.shape, chunks))
 
     # write initial dataset
     base_key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=0)
