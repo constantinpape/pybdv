@@ -46,6 +46,42 @@ class UtilTestMixin(ABC):
         scale_factors = get_scale_factors(self.out_path, 0)
         self.assertEqual(scale_factors, self.abs_scale_factors)
 
+    def test_abs_to_rel_sf(self):
+        from pybdv.util import absolute_to_relative_scale_factors
+
+        abs_sf = [[1, 1, 1], [2, 2, 2], [4, 4, 4], [8, 8, 8]]
+        rel_sf = absolute_to_relative_scale_factors(abs_sf)
+        exp_rel_sf = [[1, 1, 1], [2, 2, 2], [2, 2, 2], [2, 2, 2]]
+        self.assertEqual(rel_sf, exp_rel_sf)
+
+        abs_sf = [[1, 1, 1], [1, 2, 2], [1, 4, 4], [2, 8, 8]]
+        rel_sf = absolute_to_relative_scale_factors(abs_sf)
+        exp_rel_sf = [[1, 1, 1], [1, 2, 2], [1, 2, 2], [2, 2, 2]]
+        self.assertEqual(rel_sf, exp_rel_sf)
+
+        abs_sf = [[1, 1, 1], [3, 3, 3], [6, 6, 6], [24, 24, 24]]
+        rel_sf = absolute_to_relative_scale_factors(abs_sf)
+        exp_rel_sf = [[1, 1, 1], [3, 3, 3], [2, 2, 2], [4, 4, 4]]
+        self.assertEqual(rel_sf, exp_rel_sf)
+
+    def test_rel_to_abs_sf(self):
+        from pybdv.util import relative_to_absolute_scale_factors
+
+        rel_sf = [[1, 1, 1], [2, 2, 2], [2, 2, 2], [2, 2, 2]]
+        abs_sf = relative_to_absolute_scale_factors(rel_sf)
+        exp_abs_sf = [[1, 1, 1], [2, 2, 2], [4, 4, 4], [8, 8, 8]]
+        self.assertEqual(abs_sf, exp_abs_sf)
+
+        rel_sf = [[1, 1, 1], [1, 2, 2], [1, 2, 2], [2, 2, 2]]
+        abs_sf = relative_to_absolute_scale_factors(rel_sf)
+        exp_abs_sf = [[1, 1, 1], [1, 2, 2], [1, 4, 4], [2, 8, 8]]
+        self.assertEqual(abs_sf, exp_abs_sf)
+
+        rel_sf = [[1, 1, 1], [3, 3, 3], [2, 2, 2], [4, 4, 4]]
+        abs_sf = relative_to_absolute_scale_factors(rel_sf)
+        exp_abs_sf = [[1, 1, 1], [3, 3, 3], [6, 6, 6], [24, 24, 24]]
+        self.assertEqual(abs_sf, exp_abs_sf)
+
 
 class TestUtilH5(UtilTestMixin, unittest.TestCase):
     out_path = './tmp/test.h5'

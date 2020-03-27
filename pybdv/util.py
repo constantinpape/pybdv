@@ -8,10 +8,8 @@ try:
 except ImportError:
     import h5py
     HAVE_ELF = False
-
     # only supprt h5py if we don't have elf
-    def open_file(input_path, mode='a'):
-        return h5py.File(input_path, mode)
+    open_file = h5py.File
 
 
 HDF5_EXTENSIONS = ['.h5', '.hdf', '.hdf5']
@@ -41,7 +39,7 @@ def get_key(is_h5, timepoint=None, setup_id=None, scale=None):
 def blocking(shape, block_shape):
     """ Generator for nd blocking.
 
-    Args:
+    Argumentss:
         shape (tuple): nd shape
         block_shape (tuple): nd block shape
     """
@@ -60,6 +58,36 @@ def blocking(shape, block_shape):
         yield tuple(slice(max(pos, minc), min(pos + bsha, maxc))
                     for pos, bsha, minc, maxc in zip(positions, block_shape,
                                                      min_coords, max_coords))
+
+
+def absolute_to_relative_scale_factors(scale_factors):
+    """ Convert absolute to relative scale factors.
+
+    Arguments:
+        scale_factors (list[list[int]]): absolute scale factors
+    """
+    rel_scale_factors = [scale_factors[0]]
+    for scale_factor, prev_scale_factor in zip(scale_factors[1:], scale_factors[:-1]):
+        rel_scale_factor = [sf // prev_sf for sf, prev_sf in zip(scale_factor,
+                                                                 prev_scale_factor)]
+        rel_scale_factors.append(rel_scale_factor)
+
+    return rel_scale_factors
+
+
+def relative_to_absolute_scale_factors(scale_factors):
+    """ Convert relative to absolure scale factors.
+
+    Arguments:
+        scale_factors (list[int]): relative scale factors
+    """
+    abs_scale_factors = [scale_factors[0]]
+    for scale_factor in scale_factors[1:]:
+        abs_scale_factor = [abs_sf * sf for abs_sf, sf in zip(abs_scale_factors[-1],
+                                                              scale_factor)]
+        abs_scale_factors.append(abs_scale_factor)
+
+    return abs_scale_factors
 
 
 def get_nblocks(shape, block_shape, add_incomplete_blocks=False):
