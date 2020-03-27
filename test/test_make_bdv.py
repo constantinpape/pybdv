@@ -240,6 +240,46 @@ class MakeBdvTestMixin(ABC):
             make_bdv(data, self.out_path, setup_id=0, timepoint=2,
                      attributes={'channel': 5, 'tile': 2, 'angle': 0})
 
+    def test_overwrite(self):
+        from pybdv import make_bdv
+        from pybdv.util import get_scale_factors, absolute_to_relative_scale_factors
+        from pybdv.metadata import get_attributes
+
+        def _check(exp_data, exp_sf, exp_attrs):
+            key = get_key(self.is_h5, timepoint=0, setup_id=0, scale=0)
+            with open_file(self.out_path, 'r') as f:
+                data = f[key][:]
+            self.assertTrue(np.allclose(data, exp_data))
+
+            sf = get_scale_factors(self.out_path, setup_id=0)
+            sf = absolute_to_relative_scale_factors(sf)
+            self.assertEqual(sf, [[1, 1, 1]] + exp_sf)
+
+            attrs = get_attributes(self.xml_path, setup_id=0)
+            self.assertEqual(attrs, exp_attrs)
+
+        shape1 = (64,) * 3
+        data1 = np.random.rand(*shape1)
+        sf1 = [[2, 2, 2]]
+        attrs1 = {'channel': 1, 'angle': 2}
+
+        shape2 = (72,) * 3
+        data2 = np.random.rand(*shape2)
+        sf2 = [[1, 2, 2], [2, 2, 2]]
+        attrs2 = {'channel': 3, 'angle': 6}
+
+        make_bdv(data1, self.out_path, setup_id=0, timepoint=0,
+                 downscale_factors=sf1, attributes=attrs1)
+        _check(data1, sf1, attrs1)
+
+        make_bdv(data2, self.out_path, setup_id=0, timepoint=0,
+                 downscale_factors=sf2, attributes=attrs1)
+        _check(data1, sf1, attrs1)
+
+        make_bdv(data2, self.out_path, setup_id=0, timepoint=0,
+                 downscale_factors=sf2, attributes=attrs2, overwrite=True)
+        _check(data2, sf2, attrs2)
+
 
 class TestMakeBdvH5(MakeBdvTestMixin, unittest.TestCase):
     out_path = './tmp/test.h5'

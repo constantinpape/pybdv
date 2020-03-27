@@ -27,11 +27,28 @@ def indent_xml(elem, level=0):
 #
 
 def _require_view_setup(viewsets, setup_id, setup_name,
-                        resolution, shape, attributes, unit):
+                        resolution, shape, attributes, unit,
+                        overwrite):
 
     # parse resolution and shape
     dz, dy, dx = resolution
     nz, ny, nx = tuple(shape)
+
+    def _overwrite_setup(vs):
+        # id, name and size
+        vs.find('id').text = str(setup_id)
+        vs.find('name').text = setup_name
+        vs.find('size').text = '{} {} {}'.format(nx, ny, nz)
+
+        # voxel size and unit of measurement
+        vox = vs.find('voxelSize')
+        vox.find('unit').text = unit
+        vox.find('size').text = '{} {} {}'.format(dx, dy, dz)
+
+        # attributes for this view setup
+        attrs = vs.find('attributes')
+        for att_name, att_id in attributes.items():
+            attrs.find(att_name).text = str(att_id)
 
     def _check_setup(vs):
         # check the name and size
@@ -60,10 +77,19 @@ def _require_view_setup(viewsets, setup_id, setup_name,
     # check if we have the setup for this view already
     setups = viewsets.findall('ViewSetup')
     for vs in setups:
+        # check if this set-up exists already
         if int(vs.find('id').text) == setup_id:
-            # if we have this setup id already, we need to make
-            # sure that the setup configuration agrees
-            _check_setup(vs)
+
+            # yes it exists and we are in over-write mode
+            # -> over-write it
+            if overwrite:
+                _overwrite_setup(vs)
+
+            # yes it exsits and we are not in over-write mode
+            # -> check for consistency
+            else:
+                _check_setup(vs)
+
             return
 
     # we do not have this setup, so we write the setup configuration
@@ -120,7 +146,8 @@ def _update_attributes(viewsets, attributes):
 
 
 def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
-                       setup_id, timepoint, setup_name, affine, attributes):
+                       setup_id, timepoint, setup_name, affine, attributes,
+                       overwrite):
     """ Write bigdataviewer xml.
 
     Based on https://github.com/tlambert03/imarispy/blob/master/imarispy/bdv.py.
@@ -130,11 +157,12 @@ def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
         unit (str): physical unit of the data
         resolution (str): resolution / voxel size of the data at the original scale
         is_h5 (bool): is the data in h5 or n5 format
-        setup_id (int): id of the set-up (default: None)
-        timepoint (int): id of the time-point (default: None)
-        setup_name (str): name of this set-up (default: None)
-        affine (list[int] or dict[list[int]]): affine transformations for the view set-up (default: None)
+        setup_id (int): id of the set-up
+        timepoint (int): id of the time-point
+        setup_name (str): name of this set-up
+        affine (list[int] or dict[list[int]]): affine transformations for the view set-up
         attributes (dict[str, int]): view setup attributes
+        overwrite (bool): whether to over-write existing setup id / timepoint
     """
     # number of timepoints hard-coded to 1
     setup_name = 'Setup%i' % setup_id if setup_name is None else setup_name
@@ -202,7 +230,8 @@ def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
 
     # require this view setup
     _require_view_setup(viewsets, setup_id, setup_name,
-                        resolution, shape, attributes, unit)
+                        resolution, shape, attributes, unit,
+                        overwrite)
 
     # write the affine transformation(s) for this view registration
     if affine is None:
@@ -216,7 +245,7 @@ def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
     tree.write(xml_path)
 
 
-def write_h5_metadata(path, scale_factors, setup_id=0, timepoint=0):
+def write_h5_metadata(path, scale_factors, setup_id=0, timepoint=0, overwrite=False):
     effective_scale = [1, 1, 1]
 
     # scale factors and chunks
@@ -243,39 +272,38 @@ def write_h5_metadata(path, scale_factors, setup_id=0, timepoint=0):
     scales = np.array(scales).astype('float32')
     chunks = np.array(chunks).astype('int')
     with open_file(path, 'a') as f:
+
         # write the resolution metadata for this set-up,
         # or if if we have this set-up already make sure
-        # that the metadata is consistent
-        key_res = 's%02i/resolutions' % setup_id
-        if key_res in f:
-            scales_expected = f[key_res][:]
-            if not np.array_equal(scales_expected, scales):
-                raise RuntimeError("Metadata for setup %i already exists and is inconsistent" % setup_id)
-        else:
-            f.create_dataset(key_res, data=scales)
+        # that the metadata is consistent (unless in over-write mode)
+        def _write_mdata(key, mdata):
+            if key in f and not overwrite:
+                mdata_expected = f[key][:]
+                if not np.array_equal(mdata_expected, mdata):
+                    raise RuntimeError("Metadata for setup %i already exists and is inconsistent" % setup_id)
+            elif key in f and overwrite:
+                del f[key]
+                f.create_dataset(key, data=mdata)
+            else:
+                f.create_dataset(key, data=mdata)
 
-        # write the chunk metadata for this set-up,
-        # or if if we have this set-up already make sure
-        # that the metadata is consistent
+        key_res = 's%02i/resolutions' % setup_id
+        _write_mdata(key_res, scales)
+
         key_chunks = 's%02i/subdivisions' % setup_id
-        if key_chunks in f:
-            chunks_expected = f[key_chunks][:]
-            if not np.array_equal(chunks_expected, chunks):
-                raise RuntimeError("Metadata for setup %i already exists and is inconsistent" % setup_id)
-        else:
-            f.create_dataset(key_chunks, data=chunks)
+        _write_mdata(key_chunks, chunks)
 
 
 # n5 metadata format is specified here:
 # https://github.com/bigdataviewer/bigdataviewer-core/blob/master/BDV%20N5%20format.md
-def write_n5_metadata(path, scale_factors, resolution, setup_id=0, timepoint=0):
+def write_n5_metadata(path, scale_factors, resolution, setup_id=0, timepoint=0, overwrite=False):
     # build the effective scale factors
     effective_scales = [scale_factors[0]]
     for factor in scale_factors[1:]:
         effective_scales.append([eff * fac
                                  for eff, fac in zip(effective_scales[-1], factor[::-1])])
 
-    with open_file(path) as f:
+    with open_file(path, 'a') as f:
         key = get_key(False, timepoint=timepoint, setup_id=setup_id, scale=0)
         dtype = str(f[key].dtype)
 
@@ -284,12 +312,12 @@ def write_n5_metadata(path, scale_factors, resolution, setup_id=0, timepoint=0):
         attrs = root.attrs
 
         # write setup metadata / check for consistency if it already exists
-        if 'downsamplingFactors' in attrs and attrs['downsamplingFactors'] != effective_scales:
+        if not overwrite and 'downsamplingFactors' in attrs and attrs['downsamplingFactors'] != effective_scales:
             raise RuntimeError("Metadata for setup %i already exists and is inconsistent" % setup_id)
         else:
             root.attrs['downsamplingFactors'] = effective_scales
 
-        if 'dataType' in attrs and attrs['dataType'] != dtype:
+        if not overwrite and 'dataType' in attrs and attrs['dataType'] != dtype:
             raise RuntimeError("Metadata for setup %i already exists and is inconsistent" % setup_id)
         else:
             root.attrs['dataType'] = dtype
@@ -310,7 +338,7 @@ def write_n5_metadata(path, scale_factors, resolution, setup_id=0, timepoint=0):
 # helper functions to support attributes
 #
 
-def validate_attributes(xml_path, attributes, setup_id):
+def validate_attributes(xml_path, attributes, setup_id, overwrite):
     if os.path.exists(xml_path):
         # validate the attributes and increase Nones
 
@@ -354,9 +382,9 @@ def validate_attributes(xml_path, attributes, setup_id):
                 this_id = this_attributes[name]
 
             # the given id is not None and we do have setup attributes
-            # -> check that the ids match
+            # -> check that the ids match (unless we are in over-write mode)
             elif this_id is not None and this_attributes is not None:
-                if this_id != this_attributes[name]:
+                if (this_id != this_attributes[name]) and (not overwrite):
                     raise ValueError("Expect id %i for attribute %s, got %i" % (this_attributes[name],
                                                                                 name, this_id))
 
