@@ -32,7 +32,7 @@ def sample_shape(shape, factor, add_incomplete_blocks=False):
         return tuple(sh // scale_factor for sh, scale_factor in zip(shape, factor))
 
 
-def downsample(path, in_key, out_key, factor, mode, n_threads=1):
+def downsample(path, in_key, out_key, factor, mode, n_threads=1, overwrite=False):
     """ Downsample input hdf5 volume
     """
 
@@ -57,6 +57,9 @@ def downsample(path, in_key, out_key, factor, mode, n_threads=1):
 
         sampled_shape = sample_shape(shape, factor)
         chunks = tuple(min(sh, ch) for sh, ch in zip(sampled_shape, ds_in.chunks))
+
+        if overwrite and out_key in f:
+            del f[out_key]
 
         ds_out = f.create_dataset(out_key, shape=sampled_shape, chunks=chunks,
                                   compression='gzip', dtype=ds_in.dtype)

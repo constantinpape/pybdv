@@ -78,14 +78,13 @@ class MakeBdvTestMixin(ABC):
         make_bdv(data, self.out_path)
         data_dict[n_views] = data
 
-        with open_file(self.out_path, 'r') as f:
-            for vid in range(n_views + 1):
-                expected_key = get_key(self.is_h5, timepoint=0, setup_id=vid, scale=0)
+        for vid in range(n_views + 1):
+            expected_key = get_key(self.is_h5, timepoint=0, setup_id=vid, scale=0)
+            with open_file(self.out_path, 'r') as f:
                 self.assertTrue(expected_key in f)
-
-                exp_data = data_dict[vid]
                 data = f[expected_key][:]
-                self.assertTrue(np.allclose(data, exp_data))
+            exp_data = data_dict[vid]
+            self.assertTrue(np.allclose(data, exp_data))
 
         # check affine trafos (only for explicit setup-ids)
         for vid in range(n_views):
@@ -97,14 +96,15 @@ class MakeBdvTestMixin(ABC):
         from pybdv import make_bdv
         from pybdv.metadata import get_time_range
 
-        n_timepoints = 4
+        n_timepoints = 6
         shape = (64,) * 3
 
         tp_data = []
         tp_setups = []
         for tp in range(n_timepoints):
             data = np.random.rand(*shape)
-            setup_id = np.random.randint(0, 10)
+            # make sure that we at least have 2 setup ids that agree
+            setup_id = np.random.randint(0, 20) if tp > 1 else 0
             make_bdv(data, self.out_path, setup_id=setup_id, timepoint=tp)
             tp_data.append(data)
             tp_setups.append(setup_id)
@@ -113,13 +113,13 @@ class MakeBdvTestMixin(ABC):
         self.assertEqual(tstart, 0)
         self.assertEqual(tstop, n_timepoints - 1)
 
-        with open_file(self.out_path, 'r') as f:
-            for tp in range(n_timepoints):
-                setup_id = tp_setups[tp]
-                tp_key = get_key(self.is_h5, timepoint=tp, setup_id=setup_id, scale=0)
+        for tp in range(n_timepoints):
+            setup_id = tp_setups[tp]
+            tp_key = get_key(self.is_h5, timepoint=tp, setup_id=setup_id, scale=0)
+            with open_file(self.out_path, 'r') as f:
                 data = f[tp_key][:]
-                data_exp = tp_data[tp]
-                self.assertTrue(np.allclose(data, data_exp))
+            data_exp = tp_data[tp]
+            self.assertTrue(np.allclose(data, data_exp))
 
     def _test_ds(self, shape, mode):
         from pybdv import make_bdv
@@ -199,6 +199,86 @@ class MakeBdvTestMixin(ABC):
         with open_file(self.out_path, 'r') as f:
             d = f[key][:]
         self.assertTrue(np.allclose(d, data))
+
+    def test_custom_attributes(self):
+        from pybdv import make_bdv
+        from pybdv.metadata import get_attributes
+        shape = (64,) * 3
+
+        data = np.random.rand(*shape)
+
+        # write setup 0
+        make_bdv(data, self.out_path, setup_id=0,
+                 attributes={'channel': None, 'tile': 2, 'angle': 0})
+        attrs_out = get_attributes(self.xml_path, 0)
+        attrs_exp = {'channel': 0, 'tile': 2, 'angle': 0}
+        self.assertEqual(attrs_out, attrs_exp)
+
+        # write setup 1
+        make_bdv(data, self.out_path, setup_id=None,
+                 attributes={'channel': None, 'tile': 2, 'angle': 0})
+        attrs_out = get_attributes(self.xml_path, 1)
+        attrs_exp = {'channel': 1, 'tile': 2, 'angle': 0}
+        self.assertEqual(attrs_out, attrs_exp)
+
+        # write to setup 0 again with different timepoint
+        make_bdv(data, self.out_path, setup_id=0, timepoint=1,
+                 attributes={'channel': None, 'tile': 2, 'angle': 0})
+        attrs_out = get_attributes(self.xml_path, 0)
+        attrs_exp = {'channel': 0, 'tile': 2, 'angle': 0}
+        self.assertEqual(attrs_out, attrs_exp)
+
+        # write next setup id with different attribute
+        # -> should fail
+        with self.assertRaises(ValueError):
+            make_bdv(data, self.out_path, setup_id=None,
+                     attributes={'channel': 5, 'tile': 2})
+
+        # write exisiting setup id with  different attribute setup
+        # -> should fail
+        with self.assertRaises(ValueError):
+            make_bdv(data, self.out_path, setup_id=0, timepoint=2,
+                     attributes={'channel': 5, 'tile': 2, 'angle': 0})
+
+    def test_overwrite(self):
+        from pybdv import make_bdv
+        from pybdv.util import get_scale_factors, absolute_to_relative_scale_factors
+        from pybdv.metadata import get_attributes
+
+        def _check(exp_data, exp_sf, exp_attrs):
+            key = get_key(self.is_h5, timepoint=0, setup_id=0, scale=0)
+            with open_file(self.out_path, 'r') as f:
+                data = f[key][:]
+            self.assertTrue(np.allclose(data, exp_data))
+
+            sf = get_scale_factors(self.out_path, setup_id=0)
+            sf = absolute_to_relative_scale_factors(sf)
+            self.assertEqual(sf, [[1, 1, 1]] + exp_sf)
+
+            attrs = get_attributes(self.xml_path, setup_id=0)
+            self.assertEqual(attrs, exp_attrs)
+
+        shape1 = (64,) * 3
+        data1 = np.random.rand(*shape1)
+        sf1 = [[2, 2, 2]]
+        attrs1 = {'channel': 1, 'angle': 2}
+
+        shape2 = (72,) * 3
+        data2 = np.random.rand(*shape2)
+        sf2 = [[1, 2, 2], [2, 2, 2]]
+        attrs2 = {'channel': 3, 'angle': 6}
+
+        make_bdv(data1, self.out_path, setup_id=0, timepoint=0,
+                 downscale_factors=sf1, attributes=attrs1)
+        _check(data1, sf1, attrs1)
+
+        make_bdv(data2, self.out_path, setup_id=0, timepoint=0,
+                 downscale_factors=sf2, attributes=attrs1)
+        _check(data1, sf1, attrs1)
+
+        make_bdv(data2, self.out_path, setup_id=0, timepoint=0,
+                 downscale_factors=sf2, attributes=attrs2, overwrite=True)
+        _check(data2, sf2, attrs2)
 
 
 class TestMakeBdvH5(MakeBdvTestMixin, unittest.TestCase):
