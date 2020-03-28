@@ -5,14 +5,7 @@ from shutil import rmtree
 
 import numpy as np
 from pybdv import make_bdv
-
-try:
-    from elf.io import open_file
-    WITH_ELF = True
-except ImportError:
-    import h5py
-    open_file = h5py.File
-    WITH_ELF = False
+from pybdv.util import HAVE_ELF
 
 
 class UtilTestMixin(ABC):
@@ -87,7 +80,7 @@ class TestUtilH5(UtilTestMixin, unittest.TestCase):
     out_path = './tmp/test.h5'
 
 
-@unittest.skipUnless(WITH_ELF, "Need elf for n5 support")
+@unittest.skipUnless(HAVE_ELF, "Need elf for n5 support")
 class TestConvertToBdvN5(UtilTestMixin, unittest.TestCase):
     out_path = './tmp/test.n5'
 

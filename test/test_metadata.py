@@ -5,14 +5,8 @@ from shutil import rmtree
 
 import numpy as np
 from pybdv import make_bdv
+from pybdv.util import open_file, HAVE_ELF
 
-try:
-    from elf.io import open_file
-    WITH_ELF = True
-except ImportError:
-    import h5py
-    open_file = h5py.File
-    WITH_ELF = False
 
 
 class MetadataTestMixin(ABC):
@@ -66,7 +60,7 @@ class TestMetadataH5(MetadataTestMixin, unittest.TestCase):
     bdv_format = 'bdv.hdf5'
 
 
-@unittest.skipUnless(WITH_ELF, "Need elf for n5 support")
+@unittest.skipUnless(HAVE_ELF, "Need elf for n5 support")
 class TestMetadataN5(MetadataTestMixin, unittest.TestCase):
     in_path = './tmp/in.n5'
     out_path = './tmp/test.n5'
