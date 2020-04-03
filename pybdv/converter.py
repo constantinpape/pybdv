@@ -162,7 +162,7 @@ def convert_to_bdv(input_path, input_key, output_path,
                    downscale_factors=None, downscale_mode='nearest',
                    resolution=[1., 1., 1.], unit='pixel',
                    setup_id=None, timepoint=0,
-                   setup_name=None, affine=None, attributes={'channel': None},
+                   setup_name=None, affine=None, attributes={'channel': {'id': None}},
                    overwrite=False, convert_dtype=None, chunks=None, n_threads=1):
     """ Convert hdf5 volume to BigDatViewer format.
 
@@ -187,9 +187,11 @@ def convert_to_bdv(input_path, input_key, output_path,
             Can either be a list for a single transformation or a dictionary for multiple transformations.
             Each transformation needs to be given in the bdv convention, i.e. using XYZ axis convention
             unlike the other parameters of pybdv, that expect ZYX axis convention. (default: None)
-        attributes (dict[str, int]): attributes associated with the view setups. Expects a dictionary
-            that gives the id for each attribute name. If the id is None,
-            it will be increased from the current highest id. (default: {'channel': None})
+        attributes (dict[str, dict]): attributes associated with the view setups. Expects a dictionary
+            which maps the attribute anmes to their settings (also dict).
+            The setting dictionaries must contain the entry id is None.
+            If this entry's value is None, it will be set to the current highest id + 1.
+            (default: {'channel': {'id': None}})
         overwrite (bool): whether to over-write or skip existing setups with existing setup id and time-point.
             (default: False)
         convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
@@ -267,8 +269,8 @@ def make_bdv(data, output_path,
              downscale_factors=None, downscale_mode='nearest',
              resolution=[1., 1., 1.], unit='pixel',
              setup_id=None, timepoint=0, setup_name=None,
-             affine=None, attributes={'channel': None}, overwrite=False,
-             convert_dtype=None, chunks=None, n_threads=1):
+             affine=None, attributes={'channel': {'id': None}},
+             overwrite=False, convert_dtype=None, chunks=None, n_threads=1):
     """ Write data in BigDatViewer file format for one view setup and timepoint.
 
     Optionally downscale the input data to multi-scale image pyramid.
@@ -290,9 +292,11 @@ def make_bdv(data, output_path,
             Can either be a list for a single transformation or a dictionary for multiple transformations.
             Each transformation needs to be given in the bdv convention, i.e. using XYZ axis convention
             unlike the other parameters of pybdv, that expect ZYX axis convention. (default: None)
-        attributes (dict[str, int]): attributes associated with the view setups. Expects a dictionary
-            that gives the id for each attribute name. If the id is None,
-            it will be increased from the current highest id. (default: {'channel': None})
+        attributes (dict[str, dict]): attributes associated with the view setups. Expects a dictionary
+            which maps the attribute anmes to their settings (also dict).
+            The setting dictionaries must contain the entry id is None.
+            If this entry's value is None, it will be set to the current highest id + 1.
+            (default: {'channel': {'id': None}})
         overwrite (bool): whether to over-write or skip existing setups with existing setup id and time-point.
             (default: False)
         convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.

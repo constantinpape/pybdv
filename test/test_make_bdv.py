@@ -199,38 +199,59 @@ class MakeBdvTestMixin(ABC):
 
         data = np.random.rand(*shape)
 
+        chan_name = 'DAPI'
+        tile_name = 'some-tile'
+        angle_name = 'some-angle'
         # write setup 0
         make_bdv(data, self.out_path, setup_id=0,
-                 attributes={'channel': None, 'tile': 2, 'angle': 0})
+                 attributes={'channel': {'id': None, 'name': chan_name},
+                             'tile': {'id': 2, 'name': tile_name},
+                             'angle': {'id': 0, 'name': angle_name}})
         attrs_out = get_attributes(self.xml_path, 0)
-        attrs_exp = {'channel': 0, 'tile': 2, 'angle': 0}
+        attrs_exp = {'channel': {'id': 0, 'name': chan_name},
+                     'tile': {'id': 2, 'name': tile_name},
+                     'angle': {'id': 0, 'name': angle_name}}
         self.assertEqual(attrs_out, attrs_exp)
 
         # write setup 1
         make_bdv(data, self.out_path, setup_id=None,
-                 attributes={'channel': None, 'tile': 2, 'angle': 0})
+                 attributes={'channel': {'id': None},
+                             'tile': {'id': 2},
+                             'angle': {'id': 0}})
         attrs_out = get_attributes(self.xml_path, 1)
-        attrs_exp = {'channel': 1, 'tile': 2, 'angle': 0}
+        attrs_exp = {'channel': {'id': 1},
+                     'tile': {'id': 2, 'name': tile_name},
+                     'angle': {'id': 0, 'name': angle_name}}
         self.assertEqual(attrs_out, attrs_exp)
 
         # write to setup 0 again with different timepoint
         make_bdv(data, self.out_path, setup_id=0, timepoint=1,
-                 attributes={'channel': None, 'tile': 2, 'angle': 0})
+                 attributes={'channel': {'id': None},
+                             'tile': {'id': 2},
+                             'angle': {'id': 0}})
         attrs_out = get_attributes(self.xml_path, 0)
-        attrs_exp = {'channel': 0, 'tile': 2, 'angle': 0}
+        attrs_exp = {'channel': {'id': 0, 'name': chan_name},
+                     'tile': {'id': 2, 'name': tile_name},
+                     'angle': {'id': 0, 'name': angle_name}}
         self.assertEqual(attrs_out, attrs_exp)
 
-        # write next setup id with different attribute
+        # write next setup id without specifying all attribute names
         # -> should fail
         with self.assertRaises(ValueError):
             make_bdv(data, self.out_path, setup_id=None,
-                     attributes={'channel': 5, 'tile': 2})
+                     attributes={'channel': {'id': 5}, 'tile': {'id': 2}})
+
+        # write next setup id with a new attribute name
+        # -> should fail
+        with self.assertRaises(ValueError):
+            make_bdv(data, self.out_path, setup_id=None,
+                     attributes={'channel': {'id': 5}, 'settings': {'id': 2}})
 
         # write exisiting setup id with  different attribute setup
         # -> should fail
         with self.assertRaises(ValueError):
             make_bdv(data, self.out_path, setup_id=0, timepoint=2,
-                     attributes={'channel': 5, 'tile': 2, 'angle': 0})
+                     attributes={'channel': {'id': 5}, 'tile': {'id': 2}, 'angle': {'id': 0}})
 
     def test_overwrite(self):
         from pybdv import make_bdv
@@ -253,12 +274,12 @@ class MakeBdvTestMixin(ABC):
         shape1 = (64,) * 3
         data1 = np.random.rand(*shape1)
         sf1 = [[2, 2, 2]]
-        attrs1 = {'channel': 1, 'angle': 2}
+        attrs1 = {'channel': {'id': 1}, 'angle': {'id': 2}}
 
         shape2 = (72,) * 3
         data2 = np.random.rand(*shape2)
         sf2 = [[1, 2, 2], [2, 2, 2]]
-        attrs2 = {'channel': 3, 'angle': 6}
+        attrs2 = {'channel': {'id': 3}, 'angle': {'id': 6}}
 
         make_bdv(data1, self.out_path, setup_id=0, timepoint=0,
                  downscale_factors=sf1, attributes=attrs1)
