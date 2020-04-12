@@ -66,10 +66,10 @@ class ConvertToBdvTestMixin(ABC):
             self.assertEqual(attrs, exp_attrs)
 
         sf1 = [[2, 2, 2]]
-        attrs1 = {'channel': 1, 'angle': 2}
+        attrs1 = {'channel': {'id': 1}, 'angle': {'id': 2}}
 
         sf2 = [[1, 2, 2], [2, 2, 2]]
-        attrs2 = {'channel': 3, 'angle': 6}
+        attrs2 = {'channel': {'id': 3}, 'angle': {'id': 6}}
 
         convert_to_bdv(self.in_path, 'data', self.out_path, setup_id=0, timepoint=0,
                        downscale_factors=sf1, attributes=attrs1)
