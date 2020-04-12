@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import xml.etree.ElementTree as ET
+from numbers import Number
 from .util import open_file, get_key
 
 
@@ -47,8 +48,8 @@ def _require_view_setup(viewsets, setup_id, setup_name,
 
         # attributes for this view setup
         attrs = vs.find('attributes')
-        for att_name, att_id in attributes.items():
-            attrs.find(att_name).text = str(att_id)
+        for att_name, att_values in attributes.items():
+            attrs.find(att_name).text = str(att_values['id'])
 
     def _check_setup(vs):
         # check the name and size
@@ -68,10 +69,10 @@ def _require_view_setup(viewsets, setup_id, setup_name,
         if res_exp != (dx, dy, dz):
             raise ValueError("Incompatible voxel size")
 
-        # check the view attributes
-        attrs = vs.find('attributes')
-        view_attrs = {att.tag: int(att.text) for att in attrs}
-        if view_attrs != attributes:
+        # check the view attributes (only check for ids!)
+        view_attrs = read_view_attributes(vs.find('attributes'))
+        check_attrs = {k: v['id'] for k, v in attributes.items()}
+        if view_attrs != check_attrs:
             raise ValueError("Incompatible view attributes")
 
     # check if we have the setup for this view already
@@ -107,23 +108,21 @@ def _require_view_setup(viewsets, setup_id, setup_name,
 
     # attributes for this view setup
     attrs = ET.SubElement(vs, 'attributes')
-    for att_name, att_id in attributes.items():
-        ET.SubElement(attrs, att_name).text = str(att_id)
+    for att_name, att_values in attributes.items():
+        ET.SubElement(attrs, att_name).text = str(att_values['id'])
 
 
 def _initialize_attributes(viewsets, attributes):
-    for att_name, att_id in attributes.items():
+    for att_name, att_values in attributes.items():
         attrsets = ET.SubElement(viewsets, 'Attributes')
         attrsets.attrib['name'] = att_name
         xml_name = att_name.capitalize()
         attr_setup = ET.SubElement(attrsets, xml_name)
-        ET.SubElement(attr_setup, 'id').text = str(att_id)
-        # we set the name to be the attribute setup-id by default,
-        # the function 'write_attribute_name' can be used to set it
-        ET.SubElement(attr_setup, 'name').text = str(att_id)
+        for name, val in att_values.items():
+            ET.SubElement(attr_setup, name).text = str(val)
 
 
-def _update_attributes(viewsets, attributes):
+def _update_attributes(viewsets, attributes, overwrite):
     attrsets = viewsets.findall('Attributes')
     for attrset in attrsets:
         this_name = attrset.attrib['name']
@@ -132,17 +131,42 @@ def _update_attributes(viewsets, attributes):
         # have thrown an error; so it's ok to just use assert here, because if this
         # throws it is a logic error, not a user error
         assert this_name in attributes, this_name
-        this_id = attributes[this_name]
+        this_values = attributes[this_name]
+        assert 'id' in this_values
+        this_id = this_values['id']
 
         xml_name = this_name.capitalize()
         attr_setups = attrset.findall(xml_name)
-        this_ids = [int(att_set.find('id').text) for att_set in attr_setups]
+        attr_ids = [int(att_set.find('id').text) for att_set in attr_setups]
 
-        # if we don't have this attribute id yet, write it
-        if this_id not in this_ids:
+        # do we have this attribute id already?
+        has_id = this_id in attr_ids
+
+        # yes, we have it already and we are in over-write mode
+        # -> over-write all the settings for this attribute
+        if has_id and overwrite:
+            # find this attribute setup, over-write existing keys
+            # and add new keys
+            for attr_setup in attr_setups:
+                if int(attr_setup.find('id').text) != this_id:
+                    continue
+
+                for name, val in this_values:
+                    elem = attr_setup.find(name)
+                    if elem is None:
+                        elem = ET.SubElement(attr_setup, name)
+                    elem.text = str(val)
+
+        # yes, we have it already, but we are not in over-write mode
+        # -> do nothing
+        elif has_id and not overwrite:
+            continue
+        # no, we don't have it
+        # -> write the new attribute setup
+        else:
             attr_setup = ET.SubElement(attrset, xml_name)
-            ET.SubElement(attr_setup, 'id').text = str(this_id)
-            ET.SubElement(attr_setup, 'name').text = str(this_id)
+            for name, val in this_values.items():
+                ET.SubElement(attr_setup, name).text = str(val)
 
 
 def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
@@ -184,7 +208,7 @@ def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
 
         # load the view descriptions and update the attributes
         viewsets = seqdesc.find('ViewSetups')
-        _update_attributes(viewsets, attributes)
+        _update_attributes(viewsets, attributes, overwrite)
 
         # load the registration decriptions
         vregs = root.find('ViewRegistrations')
@@ -338,104 +362,153 @@ def write_n5_metadata(path, scale_factors, resolution, setup_id=0, timepoint=0, 
 # helper functions to support attributes
 #
 
-def validate_attributes(xml_path, attributes, setup_id, overwrite):
-    if os.path.exists(xml_path):
-        # validate the attributes and increase Nones
 
-        # load the view setups
-        setups = ET.parse(xml_path).getroot().find('SequenceDescription').find('ViewSetups')
-
-        # check if we have this view already, if we do load it's
-        # attribute mapping
-        this_attributes = None
-        viewsets = setups.findall('ViewSetup')
-        for viewset in viewsets:
-            if int(viewset.find('id').text) == setup_id:
-                this_attributes = viewset.find('attributes')
-                this_attributes = {att.tag: int(att.text) for att in this_attributes}
-                break
-
-        # get all the attribute setups
-        attrs_xml = setups.findall('Attributes')
-        all_names_xml = set()
-
-        # iterate over the attributes and make sure that all attribute names exist
-        # and check the attribute ids
-        attrs_out = {}
-        for attribute in attrs_xml:
-            name = attribute.attrib['name']
-            if name not in attributes:
-                raise ValueError("Expect attributes to contain %s" % name)
-            all_names_xml.update({name})
-
-            xml_ids = [int(child.find('id').text) for child in attribute]
-            this_id = attributes[name]
-
-            # the given id is None and we don't have setup attributes
-            # -> increase current max id for the attribute by 1
-            if this_id is None and this_attributes is None:
-                this_id = max(xml_ids) + 1
-
-            # the given id is None and we do have setup attributes
-            # set id to the id present in the setup
-            elif this_id is None and this_attributes is not None:
-                this_id = this_attributes[name]
-
-            # the given id is not None and we do have setup attributes
-            # -> check that the ids match (unless we are in over-write mode)
-            elif this_id is not None and this_attributes is not None:
-                if (this_id != this_attributes[name]) and (not overwrite):
-                    raise ValueError("Expect id %i for attribute %s, got %i" % (this_attributes[name],
-                                                                                name, this_id))
-
-            attrs_out[name] = this_id
-
-        # check that we don't have excess names in the input attributes
-        this_names = set(attributes.keys())
-        if len(this_names - all_names_xml) > 0:
-            raise ValueError("Attributes contains unexpected names")
-
-        return attrs_out
-    else:
-        # we don't have an xml yet, so we just set Nones to 0
-        return {k: 0 if v is None else v for k, v in attributes.items()}
-
-
-def write_attribute_name(xml_path, attribute, attribute_id, attribute_name):
-    """ Write the name for an attribute setup id
-
-    Arguments:
-        xml_path (str): path to the xml file with the metadata
-        attribute (str): root name of the attribute to write
-        attribute_id (int): id of the root attribute for which to write the name
-        attribute_name (str): name to write
+def _validate_attribute_id(this_attributes, this_id, xml_ids, overwrite, name):
+    """ Validate attribute id.
     """
-    root = ET.parse(xml_path).getroot()
-    viewsets = root.find('SequenceDescription').find('ViewSetups')
-    attrs = viewsets.findall('Attributes')
 
-    have_written_name = False
-    for att in attrs:
-        name = att.attrib['name']
-        if name == attribute:
-            xml_name = name.capitalize()
-            this_attrs = att.findall(xml_name)
-            for att_elem in this_attrs:
-                if int(att_elem.find('id').text) == attribute_id:
-                    att_elem.find('name').text = attribute_name
-                    have_written_name = True
-                    break
+    # the given id is None and we don't have setup attributes
+    # -> increase current max id for the attribute by 1
+    if this_id is None and this_attributes is None:
+        this_id = max(xml_ids) + 1
 
-        if have_written_name:
+    # the given id is None and we do have setup attributes
+    # set id to the id present in the setup
+    elif this_id is None and this_attributes is not None:
+        this_id = this_attributes[name]
+
+    # the given id is not None and we do have setup attributes
+    # -> check that the ids match (unless we are in over-write mode)
+    elif this_id is not None and this_attributes is not None:
+        if (this_id != this_attributes[name]) and (not overwrite):
+            raise ValueError("Expect id %i for attribute %s, got %i" % (this_attributes[name],
+                                                                        name,
+                                                                        this_id))
+    return this_id
+
+
+def _validate_attribute_dict(this_attributes, this_attribute_values,
+                             xml_ids, overwrite, name):
+    """ Validate attribute values, which are a dict.
+    For now, we only validate and update the id given in the dict and do
+    not check for consistency of other values (but we check that these are not nested types).
+    """
+    try:
+        this_id = this_attribute_values['id']
+    except KeyError:
+        raise ValueError("Attribute values muset to contain entry with key 'id'")
+
+    # validate the id
+    this_id = _validate_attribute_id(this_attributes, this_id, xml_ids, overwrite, name)
+
+    # make output values and check that all other attribute values are of simple type
+    values_out = {'id': this_id}
+    for k, v in this_attribute_values.items():
+        if k == 'id':
+            continue
+        # check simple type
+        if not (isinstance(v, str) or isinstance(v, Number)):
+            raise ValueError("Attribute values must be string, bool or number, got %s" % type(v))
+        values_out[k] = v
+
+    return values_out
+
+
+def _validate_existing_attributes(setups, setup_id, attributes, overwrite):
+    """ Validate the attributes with metadata already present, increase the 'id' if it's None.
+    """
+    # check if we have this view already, if we do load it's
+    # attribute mapping
+    this_attributes = None
+    viewsets = setups.findall('ViewSetup')
+    for viewset in viewsets:
+        if int(viewset.find('id').text) == setup_id:
+            this_attributes = viewset.find('attributes')
+            this_attributes = read_view_attributes(this_attributes)
             break
 
-    if not have_written_name:
-        raise ValueError("Could not find %s, id %i" % (attribute, attribute_id))
+    # get all the attribute setups
+    attrs_xml = setups.findall('Attributes')
+    all_names_xml = set()
 
-    # write the xml
-    indent_xml(root)
-    tree = ET.ElementTree(root)
-    tree.write(xml_path)
+    # iterate over the attributes and make sure that all attribute names exist
+    # and check the attribute ids
+    attrs_out = {}
+    for attribute in attrs_xml:
+        name = attribute.attrib['name']
+        if name not in attributes:
+            raise ValueError("Expected attributes to contain %s" % name)
+        all_names_xml.update({name})
+
+        xml_ids = [int(child.find('id').text) for child in attribute]
+        this_attribute_values = attributes[name]
+
+        if not isinstance(this_attribute_values, dict):
+            raise ValueError("Expected or dict, got %s" % type(this_attribute_values))
+
+        this_out = _validate_attribute_dict(this_attributes, this_attribute_values,
+                                            xml_ids, overwrite, name)
+        attrs_out[name] = this_out
+
+    # check that we don't have excess names in the input attributes
+    this_names = set(attributes.keys())
+    if len(this_names - all_names_xml) > 0:
+        raise ValueError("Attributes contains unexpected names")
+
+    return attrs_out
+
+
+def _validate_new_attributes(attributes):
+
+    def _validate_new(value):
+        if not isinstance(value, dict):
+            raise ValueError("Expected dict, got %s" % type(value))
+
+        if 'id' not in value:
+            raise ValueError("Attribute values must to contain entry 'id'")
+
+        new_value = {}
+        for k, v in value.items():
+            v = 0 if (k == 'id' and v is None) else v
+            if not (isinstance(v, str) or isinstance(v, Number)):
+                raise ValueError("Attribute values must be string, bool or number, got %s" % type(v))
+            new_value[k] = v
+        return new_value
+
+    attrs_out = {k: _validate_new(v) for k, v in attributes.items()}
+    return attrs_out
+
+
+def validate_attributes(xml_path, attributes, setup_id, overwrite):
+    if os.path.exists(xml_path):
+        setups = ET.parse(xml_path).getroot().find('SequenceDescription').find('ViewSetups')
+        attrs_out = _validate_existing_attributes(setups, setup_id, attributes, overwrite)
+    else:
+        attrs_out = _validate_new_attributes(attributes)
+    return attrs_out
+
+
+def read_view_attributes(view_attrs):
+    return {att.tag: int(att.text) for att in view_attrs}
+
+
+def read_attributes(attributes):
+
+    # cast from str to corresponding type
+    def _cast(val):
+        try:
+            val = float(val)
+            return val
+        except ValueError:
+            pass
+        try:
+            val = int(val)
+            return val
+        except ValueError:
+            pass
+        return val
+
+    return {att.tag: _cast(att.text) for att in attributes}
 
 
 def get_attributes(xml_path, setup_id):
@@ -449,13 +522,33 @@ def get_attributes(xml_path, setup_id):
     setups = root.find('SequenceDescription').find('ViewSetups')
 
     viewsets = setups.findall('ViewSetup')
+    attr_ids = None
     for viewset in viewsets:
         if int(viewset.find('id').text) == setup_id:
-            attributes = viewset.find('attributes')
-            attributes = {att.tag: int(att.text) for att in attributes}
-            return attributes
+            attr_ids = read_view_attributes(viewset.find('attributes'))
 
-    raise ValueError("Could not find setup %i" % setup_id)
+    if attr_ids is None:
+        raise ValueError("Could not find setup %i" % setup_id)
+
+    attributes = {}
+    attribute_settings = setups.findall('Attributes')
+    for attribute_setups in attribute_settings:
+        name = attribute_setups.attrib['name']
+        assert name in attr_ids, name
+        this_id = attr_ids[name]
+
+        this_attrs = None
+        for attribute_setup in attribute_setups:
+            attrs = read_attributes(attribute_setup)
+            if attrs['id'] == this_id:
+                this_attrs = attrs
+                break
+
+        assert this_attrs is not None
+
+        attributes[name] = this_attrs
+
+    return attributes
 
 
 #

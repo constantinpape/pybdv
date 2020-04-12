@@ -33,7 +33,7 @@ def main():
 
     parser.add_argument('--affine', type=str, default=None,
                         help='affine transformation(s) used for view registration, expects json encoded list or dict')
-    default_attributes = {'channel': None}
+    default_attributes = {'channel': {'id': None}}
     default_attributes = json.dumps(default_attributes)
     parser.add_argument('--attributes', type=str, default=default_attributes,
                         help='attributes for this view, expects json encoded dict')
