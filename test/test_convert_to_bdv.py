@@ -44,6 +44,7 @@ class ConvertToBdvTestMixin(ABC):
         convert_to_bdv(self.in_path, 'data', self.out_path)
         self.check_result()
 
+    # TODO check the modes 'overwrite=data' and 'overwrite=metadata'
     def test_overwrite(self):
         from pybdv import convert_to_bdv
         from pybdv.util import get_scale_factors, absolute_to_relative_scale_factors
@@ -82,7 +83,7 @@ class ConvertToBdvTestMixin(ABC):
         _check('data', sf1, attrs1)
 
         convert_to_bdv(self.in_path, 'data2', self.out_path, setup_id=0, timepoint=0,
-                       downscale_factors=sf2, attributes=attrs2, overwrite=True)
+                       downscale_factors=sf2, attributes=attrs2, overwrite='all')
         _check('data2', sf2, attrs2)
 
     def test_cli_simple(self):

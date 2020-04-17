@@ -38,7 +38,7 @@ def main():
     parser.add_argument('--attributes', type=str, default=default_attributes,
                         help='attributes for this view, expects json encoded dict')
 
-    parser.add_argument('--overwrite', type=int, default=0,
+    parser.add_argument('--overwrite', type=str, default='skip',
                         help='whether to overwrite existing views')
     parser.add_argument('--chunks', type=str, default=None,
                         help='chunk settings, expects json encoded list')
@@ -87,7 +87,7 @@ def main():
                    downscale_factors, args.downscale_mode,
                    resolution=args.resolution, unit=args.unit,
                    setup_id=args.setup_id, timepoint=args.timepoint, setup_name=args.setup_name,
-                   affine=affine, attributes=attributes, overwrite=int(args.overwrite),
+                   affine=affine, attributes=attributes, overwrite=args.overwrite,
                    chunks=chunks, n_threads=args.n_threads)
 
 

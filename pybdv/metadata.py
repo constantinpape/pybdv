@@ -641,8 +641,42 @@ def get_affine(xml_path, setup_id, timepoint=0):
 
 
 #
-# helper functions to read attributes from the xml metadata
+# helper functions to read additional data from the xml metadata
 #
+
+
+def get_setup_ids(xml_path):
+    """ Get all available setup ids.
+
+    Arguments:
+        xml_path (str): path to the xml file with the metadata
+    """
+    ids = []
+    root = ET.parse(xml_path).getroot()
+    viewsets = root.find('SequenceDescription').find('ViewSetups')
+    vsetups = viewsets.findall('ViewSetup')
+    for vs in vsetups:
+        ids.append(int(vs.find('id').text))
+    return ids
+
+
+def get_timeponts(xml_path, setup_id):
+    """ Get timepoints for a given setup id.
+
+    Arguments:
+        xml_path (str): path to the xml file with the metadata
+    """
+    timepoints = []
+    root = ET.parse(xml_path).getroot()
+    viewregs = root.find('ViewRegistrations').findall('ViewRegistration')
+    for reg in viewregs:
+        this_id = int(reg.attrib['setup'])
+        this_tp = int(reg.attrib['timepoint'])
+        if this_id == setup_id:
+            timepoints.append(this_tp)
+    timepoints.sort()
+    return timepoints
+
 
 def get_time_range(xml_path):
     """ Get the first and last timepoint present.

@@ -253,6 +253,7 @@ class MakeBdvTestMixin(ABC):
             make_bdv(data, self.out_path, setup_id=0, timepoint=2,
                      attributes={'channel': {'id': 5}, 'tile': {'id': 2}, 'angle': {'id': 0}})
 
+    # TODO check the modes 'overwrite=data' and 'overwrite=metadata'
     def test_overwrite(self):
         from pybdv import make_bdv
         from pybdv.util import get_scale_factors, absolute_to_relative_scale_factors
@@ -286,11 +287,11 @@ class MakeBdvTestMixin(ABC):
         _check(data1, sf1, attrs1)
 
         make_bdv(data2, self.out_path, setup_id=0, timepoint=0,
-                 downscale_factors=sf2, attributes=attrs1)
+                 downscale_factors=sf2, attributes=attrs1, overwrite='skip')
         _check(data1, sf1, attrs1)
 
         make_bdv(data2, self.out_path, setup_id=0, timepoint=0,
-                 downscale_factors=sf2, attributes=attrs2, overwrite=True)
+                 downscale_factors=sf2, attributes=attrs2, overwrite='all')
         _check(data2, sf2, attrs2)
 
 

@@ -1,61 +1,95 @@
 import os
 import numpy as np
+from warnings import warn
 from concurrent import futures
 from tqdm import tqdm
 
 from .util import (blocking, get_nblocks, open_file, get_key,
                    HAVE_ELF, HDF5_EXTENSIONS, N5_EXTENSIONS, XML_EXTENSIONS)
-from .metadata import (validate_affine, validate_attributes,
+from .metadata import (get_setup_ids, get_timeponts,
+                       validate_affine, validate_attributes,
                        write_h5_metadata, write_xml_metadata, write_n5_metadata)
 from .downsample import downsample
 from .dtypes import convert_to_bdv_dtype, get_new_dtype
 
+OVERWRITE_OPTIONS = ('skip', 'data', 'metadata', 'all')
 
-def handle_setup_id(setup_id, data_path, is_h5, timepoint, overwrite):
 
-    # get the existing setup ids
-    if os.path.exists(data_path):
-        with open_file(data_path, 'r') as f:
-            if is_h5:
-                tp_key = 't%05i' % timepoint
-                if tp_key in f:
-                    g = f[tp_key]
-                    setup_ids = list(g.keys())
-                    setup_ids = [int(sid[1:]) for sid in setup_ids]
-                else:
-                    setup_ids = []
-            else:
-                setup_ids = [key for key in f.keys()
-                             if (key.startswith('setup') and
-                                 'timepoint%i' % timepoint in f[key])]
-                setup_ids = [int(sid[5:]) for sid in setup_ids]
+def handle_setup_id(setup_id, xml_path, timepoint, overwrite):
+
+    # check if we have this setup_id and timepoint already
+    have_timepoint = False
+    if os.path.exists(xml_path):
+        setup_ids = get_setup_ids(xml_path)
+        if setup_id is None:
+            setup_id = max(setup_ids) + 1
+            timepoints = []
+        else:
+            timepoints = get_timeponts(xml_path, setup_id)
     else:
-        setup_ids = [-1]
+        setup_ids = []
+        timepoints = []
+        if setup_id is None:
+            setup_id = 0
 
-    # we have three modes:
-    # 0: normal mode
-    # 1: the setup id is present already and we do not over-write -> skip
-    # 2: the setup id is present already and we do over-write -> over-write
-    mode = 0
+    # note: have_timepoint implies have_setup
+    have_setup = setup_id in setup_ids
+    have_timepoint = timepoint in timepoints
 
-    # setup_id is None
-    # -> select the next available setup id
-    if setup_id is None:
-        setup_id = max(setup_ids) + 1
+    if overwrite == 'skip':
+        overwrite_data_set, overwrite_meta_set = False, False
+    elif overwrite == 'data':
+        overwrite_data_set, overwrite_meta_set = True, False
+    elif overwrite == 'metadata':
+        overwrite_data_set, overwrite_meta_set = True, False
+    else:
+        overwrite_data_set, overwrite_meta_set = True, True
 
-    # setup id is given, it exists already and overwrite is True
-    # -> return this set-up id and overwrite it
-    elif setup_id in setup_ids and overwrite:
-        print("Setup id", setup_id, "is present already and will be over-written")
-        mode = 2
+    overwrite_data, overwrite_metadata, skip = False, False, False
+    # we have different scenarios for over-writing:
+    # 0: the setup id is not present, we can just write data and metadata
+    # 1: setup id and time-point are present and over-write mode is 'skip' -> skip this setup id
+    # 2: setup id and time-point are present and over-write mode is 'all' -> over-write data and metadata
+    # 3: setup id and time-point are present and over-write mode is 'data' -> over-write data, don't over-write metadata
+    # 4: setup id and time-point are present and over-write mode is 'metadata' -> don't over-write data,
+    #                                                                             over-write metadata
+    # 5: setup id is present, timepoint is not present, over-write mode is 'skip' or 'data' -> write data,
+    #                                                                                          don't over-write metadata
+    # 6: setup id is present, timepoint is not present, over-write mode is 'metadata' or 'all' -> write data,
+    #                                                                                             over-write metadata
 
-    elif setup_id in setup_ids and not overwrite:
-        print("Setup id", setup_id, "is present already and will be skipped")
-        mode = 1
+    msg = None
+    # we have both the setup-id and the data for this timepoint
+    if have_timepoint:
+        msg = "Setup %i and timepoint %i are present;" % (setup_id, timepoint)
+        if (not overwrite_data_set) and (not overwrite_meta_set):
+            msg += " no action will be taken."
+            skip = True
+        if overwrite_data_set:
+            overwrite_data = True
+            msg += " will over-write data;"
+        if overwrite_meta_set:
+            overwrite_metadata = True
+            msg += " will over-write metadata;"
+
+    # we have this setup id already, but not yet the timepoint data
+    elif have_setup and not have_timepoint:
+        msg = "Setup %i is present;" % setup_id
+        if overwrite_meta_set:
+            overwrite_data = True
+            msg += " will over-write metadata"
+        else:
+            msg += "will not over-write metadata"
+
+    # otherwise, we don't need to change the defaults
+
+    # raise warning if data or metadata was found
+    if msg is not None:
+        warn(msg)
 
     if setup_id >= 100:
         raise ValueError("Only up to 100 set-ups are supported")
-    return setup_id, mode
+    return setup_id, overwrite_data, overwrite_metadata, skip
 
 
 def copy_dataset(input_path, input_key, output_path, output_key, is_h5,
@@ -163,7 +197,7 @@ def convert_to_bdv(input_path, input_key, output_path,
                    resolution=[1., 1., 1.], unit='pixel',
                    setup_id=None, timepoint=0,
                    setup_name=None, affine=None, attributes={'channel': {'id': None}},
-                   overwrite=False, convert_dtype=None, chunks=None, n_threads=1):
+                   overwrite='skip', convert_dtype=None, chunks=None, n_threads=1):
     """ Convert hdf5 volume to BigDatViewer format.
 
     Optionally downscale the input volume and write it
@@ -192,8 +226,12 @@ def convert_to_bdv(input_path, input_key, output_path,
             The setting dictionaries must contain the entry id is None.
             If this entry's value is None, it will be set to the current highest id + 1.
             (default: {'channel': {'id': None}})
-        overwrite (bool): whether to over-write or skip existing setups with existing setup id and time-point.
-            (default: False)
+        overwrite (str): whether to over-write or skip existing data and/or metadta. Can be one of
+            - 'skip': don't over-write data or metadata
+            - 'data': over-write data, don't over-write metadata
+            - 'metadata': don't over-write data, over-write metadata
+            - 'all': over-write both data and metadta
+            (default: 'skip')
         convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
             This will map unsigned types to signed and fail if the value range is too large. (default: None)
         chunks (tuple): chunks for the output dataset.
@@ -214,17 +252,22 @@ def convert_to_bdv(input_path, input_key, output_path,
     if affine is not None:
         validate_affine(affine)
 
+    # validate over-write
+    if overwrite not in OVERWRITE_OPTIONS:
+        raise ValueError("Invalid overwrite mode %s, expected one of %s" % (overwrite,
+                                                                            ', '.join(OVERWRITE_OPTIONS)))
+
     data_path, xml_path, is_h5 = normalize_output_path(output_path)
-    setup_id, mode = handle_setup_id(setup_id, data_path, is_h5, timepoint, overwrite)
-    # mode 1 -> skip
-    if mode == 1:
+    setup_id, overwrite_data, overwrite_metadata, skip = handle_setup_id(setup_id,
+                                                                         xml_path,
+                                                                         timepoint,
+                                                                         overwrite)
+    if skip:
         return
-    # mode 2 -> over-write existing setup_id / timepoint
-    overwrite_ = mode == 2
 
     # validate the attributes
     attributes_ = validate_attributes(xml_path, attributes, setup_id,
-                                      overwrite=overwrite_)
+                                      overwrite=overwrite_metadata)
 
     # we need to convert the dtype only for the hdf5 based storage
     if convert_dtype is None:
@@ -234,7 +277,7 @@ def convert_to_bdv(input_path, input_key, output_path,
     base_key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=0)
     copy_dataset(input_path, input_key,
                  data_path, base_key, is_h5, convert_dtype=convert_dtype,
-                 chunks=chunks, n_threads=n_threads, overwrite=overwrite_)
+                 chunks=chunks, n_threads=n_threads, overwrite=overwrite_data)
 
     # downsample if needed
     if downscale_factors is None:
@@ -244,15 +287,15 @@ def convert_to_bdv(input_path, input_key, output_path,
         factors = make_scales(data_path, downscale_factors, downscale_mode,
                               ndim, setup_id, is_h5,
                               n_threads=n_threads, chunks=chunks, timepoint=timepoint,
-                              overwrite=overwrite_)
+                              overwrite=overwrite_data)
 
     # write the format specific metadata in the output container
     if is_h5:
         write_h5_metadata(data_path, factors, setup_id, timepoint,
-                          overwrite=overwrite_)
+                          overwrite=overwrite_data)
     else:
         write_n5_metadata(data_path, factors, resolution, setup_id, timepoint,
-                          overwrite=overwrite_)
+                          overwrite=overwrite_data)
 
     # write bdv xml metadata
     write_xml_metadata(xml_path, data_path, unit,
@@ -262,7 +305,7 @@ def convert_to_bdv(input_path, input_key, output_path,
                        setup_name=setup_name,
                        affine=affine,
                        attributes=attributes_,
-                       overwrite=overwrite_)
+                       overwrite=overwrite_metadata)
 
 
 def make_bdv(data, output_path,
@@ -270,7 +313,7 @@ def make_bdv(data, output_path,
              resolution=[1., 1., 1.], unit='pixel',
              setup_id=None, timepoint=0, setup_name=None,
              affine=None, attributes={'channel': {'id': None}},
-             overwrite=False, convert_dtype=None, chunks=None, n_threads=1):
+             overwrite='skip', convert_dtype=None, chunks=None, n_threads=1):
     """ Write data in BigDatViewer file format for one view setup and timepoint.
 
     Optionally downscale the input data to multi-scale image pyramid.
@@ -297,8 +340,12 @@ def make_bdv(data, output_path,
             The setting dictionaries must contain the entry id is None.
             If this entry's value is None, it will be set to the current highest id + 1.
             (default: {'channel': {'id': None}})
-        overwrite (bool): whether to over-write or skip existing setups with existing setup id and time-point.
-            (default: False)
+        overwrite (str): whether to over-write or skip existing data and/or metadta. Can be one of
+            - 'skip': don't over-write data or metadata
+            - 'data': over-write data, don't over-write metadata
+            - 'metadata': don't over-write data, over-write metadata
+            - 'all': over-write both data and metadta
+            (default: 'skip')
         convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
             This will map unsigned types to signed and fail if the value range is too large. (default: None)
         chunks (tuple): chunks for the output dataset.
@@ -315,15 +362,15 @@ def make_bdv(data, output_path,
         validate_affine(affine)
 
     data_path, xml_path, is_h5 = normalize_output_path(output_path)
-    setup_id, mode = handle_setup_id(setup_id, data_path, is_h5, timepoint, overwrite)
-    # mode 1 -> skip
-    if mode == 1:
+    setup_id, overwrite_data, overwrite_metadata, skip = handle_setup_id(setup_id,
+                                                                         xml_path,
+                                                                         timepoint,
+                                                                         overwrite)
+    if skip:
         return
-    # mode 2 -> over-write existing setup_id / timepoint
-    overwrite_ = mode == 2
 
     # validate the attributes
-    attributes_ = validate_attributes(xml_path, attributes, setup_id, overwrite_)
+    attributes_ = validate_attributes(xml_path, attributes, setup_id, overwrite_metadata)
 
     # we need to convert the dtype only for the hdf5 based storage
     if convert_dtype is None:
@@ -343,7 +390,7 @@ def make_bdv(data, output_path,
     with open_file(data_path, 'a') as f:
 
         # need to remove the previous data-set if we over-write
-        if overwrite_:
+        if overwrite_data:
             del f[base_key]
 
         ds = f.create_dataset(base_key, shape=data.shape, compression='gzip',
@@ -361,15 +408,15 @@ def make_bdv(data, output_path,
         factors = make_scales(data_path, downscale_factors, downscale_mode,
                               ndim, setup_id, is_h5,
                               n_threads=n_threads, chunks=chunks, timepoint=timepoint,
-                              overwrite=overwrite_)
+                              overwrite=overwrite_data)
 
     # write the format specific metadata in the output container
     if is_h5:
         write_h5_metadata(data_path, factors, setup_id, timepoint,
-                          overwrite=overwrite_)
+                          overwrite=overwrite_data)
     else:
         write_n5_metadata(data_path, factors, resolution, setup_id, timepoint,
-                          overwrite=overwrite_)
+                          overwrite=overwrite_data)
 
     # write bdv xml metadata
     write_xml_metadata(xml_path, data_path, unit,
@@ -379,4 +426,4 @@ def make_bdv(data, output_path,
                        setup_name=setup_name,
                        affine=affine,
                        attributes=attributes_,
-                       overwrite=overwrite_)
+                       overwrite=overwrite_metadata)
