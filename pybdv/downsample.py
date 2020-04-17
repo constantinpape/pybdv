@@ -26,10 +26,12 @@ def ds_block_reduce(data, scale_factor, out_shape, function):
 
 def sample_shape(shape, factor, add_incomplete_blocks=False):
     if add_incomplete_blocks:
-        return tuple(sh // scale_factor + int((sh % scale_factor) != 0)
-                     for sh, scale_factor in zip(shape, factor))
+        sampled = tuple(sh // scale_factor + int((sh % scale_factor) != 0)
+                        for sh, scale_factor in zip(shape, factor))
     else:
-        return tuple(sh // scale_factor for sh, scale_factor in zip(shape, factor))
+        sampled = tuple(sh // scale_factor for sh, scale_factor in zip(shape, factor))
+    sampled = tuple(max(1, sh) for sh in sampled)
+    return sampled
 
 
 def downsample(path, in_key, out_key, factor, mode, n_threads=1, overwrite=False):
