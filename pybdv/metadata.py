@@ -497,12 +497,12 @@ def read_attributes(attributes):
     # cast from str to corresponding type
     def _cast(val):
         try:
-            val = float(val)
+            val = int(val)
             return val
         except ValueError:
             pass
         try:
-            val = int(val)
+            val = float(val)
             return val
         except ValueError:
             pass
