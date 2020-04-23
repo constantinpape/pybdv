@@ -29,7 +29,7 @@ def indent_xml(elem, level=0):
 
 def _require_view_setup(viewsets, setup_id, setup_name,
                         resolution, shape, attributes, unit,
-                        overwrite):
+                        overwrite, overwrite_data, enforce_consistency):
 
     # parse resolution and shape
     dz, dy, dx = resolution
@@ -58,7 +58,10 @@ def _require_view_setup(viewsets, setup_id, setup_name,
         shape_exp = vs.find('size').text.split()
         shape_exp = tuple(int(shp) for shp in shape_exp)
         if shape_exp != (nx, ny, nz):
-            raise ValueError("Incompatible dataset size")
+            if overwrite_data:
+                vs.find('size').text = '{} {} {}'.format(nx, ny, nz)
+            else:
+                raise ValueError("Incompatible dataset size")
 
         # check the voxel size
         vox = vs.find('voxelSize')
@@ -72,7 +75,7 @@ def _require_view_setup(viewsets, setup_id, setup_name,
         # check the view attributes (only check for ids!)
         view_attrs = read_view_attributes(vs.find('attributes'))
         check_attrs = {k: v['id'] for k, v in attributes.items()}
-        if view_attrs != check_attrs:
+        if view_attrs != check_attrs and enforce_consistency:
             raise ValueError("Incompatible view attributes")
 
     # check if we have the setup for this view already
@@ -171,7 +174,7 @@ def _update_attributes(viewsets, attributes, overwrite):
 
 def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
                        setup_id, timepoint, setup_name, affine, attributes,
-                       overwrite):
+                       overwrite, overwrite_data, enforce_consistency):
     """ Write bigdataviewer xml.
 
     Based on https://github.com/tlambert03/imarispy/blob/master/imarispy/bdv.py.
@@ -187,6 +190,8 @@ def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
         affine (list[int] or dict[list[int]]): affine transformations for the view set-up
         attributes (dict[str, int]): view setup attributes
         overwrite (bool): whether to over-write existing setup id / timepoint
+        overwrite_data (bool): whether to over-write purely data-related attributes
+        enforce_consistency (bool): whether we enforce consistency of the setup attributes
     """
     # number of timepoints hard-coded to 1
     setup_name = 'Setup%i' % setup_id if setup_name is None else setup_name
@@ -255,13 +260,10 @@ def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
     # require this view setup
     _require_view_setup(viewsets, setup_id, setup_name,
                         resolution, shape, attributes, unit,
-                        overwrite)
+                        overwrite, overwrite_data, enforce_consistency)
 
     # write the affine transformation(s) for this view registration
-    if affine is None:
-        _write_default_affine(vregs, setup_id, timepoint, resolution)
-    else:
-        _write_affine(vregs, setup_id, timepoint, affine)
+    _write_transformation(vregs, setup_id, timepoint, affine, resolution, overwrite)
 
     # write the xml
     indent_xml(root)
@@ -287,6 +289,8 @@ def write_h5_metadata(path, scale_factors, setup_id=0, timepoint=0, overwrite=Fa
         # get the chunk size for this level
         out_key = get_key(True, timepoint=timepoint, setup_id=setup_id, scale=scale)
         with open_file(path, 'r') as f:
+            if out_key not in f:
+                continue
             # for some reason I don't understand we do not need to invert here
             chunk = f[out_key].chunks[::-1]
 
@@ -302,9 +306,7 @@ def write_h5_metadata(path, scale_factors, setup_id=0, timepoint=0, overwrite=Fa
         # that the metadata is consistent (unless in over-write mode)
         def _write_mdata(key, mdata):
             if key in f and not overwrite:
-                mdata_expected = f[key][:]
-                if not np.array_equal(mdata_expected, mdata):
-                    raise RuntimeError("Metadata for setup %i already exists and is inconsistent" % setup_id)
+                return
             elif key in f and overwrite:
                 del f[key]
                 f.create_dataset(key, data=mdata)
@@ -336,15 +338,13 @@ def write_n5_metadata(path, scale_factors, resolution, setup_id=0, timepoint=0, 
         attrs = root.attrs
 
         # write setup metadata / check for consistency if it already exists
-        if not overwrite and 'downsamplingFactors' in attrs and attrs['downsamplingFactors'] != effective_scales:
-            raise RuntimeError("Metadata for setup %i already exists and is inconsistent" % setup_id)
-        else:
-            root.attrs['downsamplingFactors'] = effective_scales
+        if 'downsamplingFactors' in attrs and not overwrite:
+            return
+        root.attrs['downsamplingFactors'] = effective_scales
 
-        if not overwrite and 'dataType' in attrs and attrs['dataType'] != dtype:
-            raise RuntimeError("Metadata for setup %i already exists and is inconsistent" % setup_id)
-        else:
-            root.attrs['dataType'] = dtype
+        if 'dataType' in attrs and not overwrite:
+            return
+        root.attrs['dataType'] = dtype
 
         group_key = get_key(False, timepoint=timepoint, setup_id=setup_id)
         g = f[group_key]
@@ -363,7 +363,7 @@ def write_n5_metadata(path, scale_factors, resolution, setup_id=0, timepoint=0, 
 #
 
 
-def _validate_attribute_id(this_attributes, this_id, xml_ids, overwrite, name):
+def _validate_attribute_id(this_attributes, this_id, xml_ids, enforce_consistency, name):
     """ Validate attribute id.
     """
 
@@ -380,7 +380,7 @@ def _validate_attribute_id(this_attributes, this_id, xml_ids, overwrite, name):
     # the given id is not None and we do have setup attributes
     # -> check that the ids match (unless we are in over-write mode)
     elif this_id is not None and this_attributes is not None:
-        if (this_id != this_attributes[name]) and (not overwrite):
+        if (this_id != this_attributes[name]) and enforce_consistency:
             raise ValueError("Expect id %i for attribute %s, got %i" % (this_attributes[name],
                                                                         name,
                                                                         this_id))
@@ -388,7 +388,7 @@ def _validate_attribute_id(this_attributes, this_id, xml_ids, overwrite, name):
 
 
 def _validate_attribute_dict(this_attributes, this_attribute_values,
-                             xml_ids, overwrite, name):
+                             xml_ids, enforce_consistency, name):
     """ Validate attribute values, which are a dict.
     For now, we only validate and update the id given in the dict and do
     not check for consistency of other values (but we check that these are not nested types).
@@ -399,7 +399,7 @@ def _validate_attribute_dict(this_attributes, this_attribute_values,
         raise ValueError("Attribute values muset to contain entry with key 'id'")
 
     # validate the id
-    this_id = _validate_attribute_id(this_attributes, this_id, xml_ids, overwrite, name)
+    this_id = _validate_attribute_id(this_attributes, this_id, xml_ids, enforce_consistency, name)
 
     # make output values and check that all other attribute values are of simple type
     values_out = {'id': this_id}
@@ -414,7 +414,7 @@ def _validate_attribute_dict(this_attributes, this_attribute_values,
     return values_out
 
 
-def _validate_existing_attributes(setups, setup_id, attributes, overwrite):
+def _validate_existing_attributes(setups, setup_id, attributes, enforce_consistency):
     """ Validate the attributes with metadata already present, increase the 'id' if it's None.
     """
     # check if we have this view already, if we do load it's
@@ -447,7 +447,7 @@ def _validate_existing_attributes(setups, setup_id, attributes, overwrite):
             raise ValueError("Expected or dict, got %s" % type(this_attribute_values))
 
         this_out = _validate_attribute_dict(this_attributes, this_attribute_values,
-                                            xml_ids, overwrite, name)
+                                            xml_ids, enforce_consistency, name)
         attrs_out[name] = this_out
 
     # check that we don't have excess names in the input attributes
@@ -479,10 +479,10 @@ def _validate_new_attributes(attributes):
     return attrs_out
 
 
-def validate_attributes(xml_path, attributes, setup_id, overwrite):
+def validate_attributes(xml_path, attributes, setup_id, enforce_consistency):
     if os.path.exists(xml_path):
         setups = ET.parse(xml_path).getroot().find('SequenceDescription').find('ViewSetups')
-        attrs_out = _validate_existing_attributes(setups, setup_id, attributes, overwrite)
+        attrs_out = _validate_existing_attributes(setups, setup_id, attributes, enforce_consistency)
     else:
         attrs_out = _validate_new_attributes(attributes)
     return attrs_out
@@ -573,33 +573,50 @@ def validate_affine(affine):
         raise ValueError("Invalid type for affine transformatin, expect list or dict, got %s" % type(affine))
 
 
-def _write_default_affine(vregs, setup_id, timepoint, resolution):
-    dz, dy, dx = resolution
-    vreg = ET.SubElement(vregs, 'ViewRegistration')
-    vreg.set('timepoint', str(timepoint))
-    vreg.set('setup', str(setup_id))
-    vt = ET.SubElement(vreg, 'ViewTransform')
-    vt.set('type', 'affine')
-    ox, oy, oz = 0., 0., 0.
-    ET.SubElement(vt, 'affine').text = '{} 0.0 0.0 {} 0.0 {} 0.0 {} 0.0 0.0 {} {}'.format(dx, ox,
-                                                                                          dy, oy,
-                                                                                          dz, oz)
+def _write_transformation(vregs, setup_id, timepoint, affine, resolution, overwrite):
 
-
-def _write_affine(vregs, setup_id, timepoint, affine):
-    vreg = ET.SubElement(vregs, 'ViewRegistration')
-    vreg.set('timepoint', str(timepoint))
-    vreg.set('setup', str(setup_id))
-    if isinstance(affine, list):
-        vt = ET.SubElement(vreg, 'ViewTransform')
-        vt.set('type', 'affine')
-        ET.SubElement(vt, 'affine').text = ' '.join([str(aff) for aff in affine])
-    else:
-        for name, affs in affine.items():
+    def write_trafo(vreg):
+        if isinstance(affine, dict):
+            for name, affs in affine.items():
+                vt = ET.SubElement(vreg, 'ViewTransform')
+                vt.set('type', 'affine')
+                ET.SubElement(vt, 'affine').text = ' '.join([str(aff) for aff in affs])
+                ET.SubElement(vt, 'Name').text = name
+        else:
+            if affine is None:
+                dz, dy, dx = resolution
+                ox, oy, oz = 0., 0., 0.
+                trafo = '{} 0.0 0.0 {} 0.0 {} 0.0 {} 0.0 0.0 {} {}'.format(dx, ox,
+                                                                           dy, oy,
+                                                                           dz, oz)
+            else:
+                trafo = ' '.join([str(aff) for aff in affine])
             vt = ET.SubElement(vreg, 'ViewTransform')
             vt.set('type', 'affine')
-            ET.SubElement(vt, 'affine').text = ' '.join([str(aff) for aff in affs])
-            ET.SubElement(vt, 'Name').text = name
+            ET.SubElement(vt, 'affine').text = trafo
+
+    # check if we have the affine for this setup-id and timepoint already
+    vreg = None
+    for vreg_candidate in vregs.findall('ViewRegistration'):
+        setup = int(vreg_candidate.attrib['setup'])
+        tp = int(vreg_candidate.attrib['timepoint'])
+        if (setup == setup_id) and (timepoint == tp):
+            vreg = vreg_candidate
+            break
+
+    # if we don't have it yet, create the view registration
+    if vreg is None:
+        vreg = ET.SubElement(vregs, 'ViewRegistration')
+    # if we have the view registration and over-write, clear the current trafo
+    elif vreg is not None and overwrite:
+        vreg.clear()
+    # otherwise, the trafo exists already and we don't over-write -> do nothing
+    else:
+        return
+
+    vreg.set('timepoint', str(timepoint))
+    vreg.set('setup', str(setup_id))
+    write_trafo(vreg)
 
 
 def get_affine(xml_path, setup_id, timepoint=0):

@@ -253,13 +253,12 @@ class MakeBdvTestMixin(ABC):
             make_bdv(data, self.out_path, setup_id=0, timepoint=2,
                      attributes={'channel': {'id': 5}, 'tile': {'id': 2}, 'angle': {'id': 0}})
 
-    # TODO check the modes 'overwrite=data' and 'overwrite=metadata'
-    def test_overwrite(self):
+    def _test_overwrite(self, mode):
         from pybdv import make_bdv
         from pybdv.util import get_scale_factors, absolute_to_relative_scale_factors
-        from pybdv.metadata import get_attributes
+        from pybdv.metadata import get_attributes, get_affine
 
-        def _check(exp_data, exp_sf, exp_attrs):
+        def _check(exp_data, exp_sf, exp_attrs, exp_affine):
             key = get_key(self.is_h5, timepoint=0, setup_id=0, scale=0)
             with open_file(self.out_path, 'r') as f:
                 data = f[key][:]
@@ -272,27 +271,52 @@ class MakeBdvTestMixin(ABC):
             attrs = get_attributes(self.xml_path, setup_id=0)
             self.assertEqual(attrs, exp_attrs)
 
+            affine = get_affine(self.xml_path, setup_id=0, timepoint=0)['affine0']
+            self.assertTrue(np.allclose(np.array(affine), np.array(exp_affine)))
+
         shape1 = (64,) * 3
         data1 = np.random.rand(*shape1)
         sf1 = [[2, 2, 2]]
         attrs1 = {'channel': {'id': 1}, 'angle': {'id': 2}}
+        affine1 = np.random.rand(12).tolist()
 
         shape2 = (72,) * 3
         data2 = np.random.rand(*shape2)
         sf2 = [[1, 2, 2], [2, 2, 2]]
         attrs2 = {'channel': {'id': 3}, 'angle': {'id': 6}}
+        affine2 = np.random.rand(12).tolist()
 
         make_bdv(data1, self.out_path, setup_id=0, timepoint=0,
-                 downscale_factors=sf1, attributes=attrs1)
-        _check(data1, sf1, attrs1)
+                 downscale_factors=sf1, attributes=attrs1,
+                 affine=affine1)
+        _check(data1, sf1, attrs1, affine1)
 
         make_bdv(data2, self.out_path, setup_id=0, timepoint=0,
-                 downscale_factors=sf2, attributes=attrs1, overwrite='skip')
-        _check(data1, sf1, attrs1)
+                 downscale_factors=sf2, attributes=attrs2, affine=affine2,
+                 overwrite=mode)
 
-        make_bdv(data2, self.out_path, setup_id=0, timepoint=0,
-                 downscale_factors=sf2, attributes=attrs2, overwrite='all')
-        _check(data2, sf2, attrs2)
+        if mode == 'skip':
+            _check(data1, sf1, attrs1, affine1)
+        elif mode == 'all':
+            _check(data2, sf2, attrs2, affine2)
+        elif mode == 'data':
+            _check(data2, sf2, attrs1, affine1)
+        elif mode == 'metadata':
+            _check(data1, sf1, attrs2, affine2)
+        else:
+            raise ValueError("Invalid over-write mode")
+
+    def test_overwrite_skip(self):
+        self._test_overwrite('skip')
+
+    def test_overwrite_all(self):
+        self._test_overwrite('all')
+
+    def test_overwrite_metadata(self):
+        self._test_overwrite('metadata')
+
+    def test_overwrite_data(self):
+        self._test_overwrite('data')
 
 
 class TestMakeBdvH5(MakeBdvTestMixin, unittest.TestCase):

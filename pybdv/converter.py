@@ -41,7 +41,7 @@ def handle_setup_id(setup_id, xml_path, timepoint, overwrite):
     elif overwrite == 'data':
         overwrite_data_set, overwrite_meta_set = True, False
     elif overwrite == 'metadata':
-        overwrite_data_set, overwrite_meta_set = True, False
+        overwrite_data_set, overwrite_meta_set = False, True
     else:
         overwrite_data_set, overwrite_meta_set = True, True
 
@@ -76,7 +76,7 @@ def handle_setup_id(setup_id, xml_path, timepoint, overwrite):
     elif have_setup and not have_timepoint:
         msg = "Setup %i is present;" % setup_id
         if overwrite_meta_set:
-            overwrite_data = True
+            overwrite_metadata = True
             msg += " will over-write metadata"
         else:
             msg += "will not over-write metadata"
@@ -99,6 +99,10 @@ def copy_dataset(input_path, input_key, output_path, output_key, is_h5,
 
         ds_in = f_in[input_key]
         shape = ds_in.shape
+
+        have_data = output_key in f_out
+        if have_data and not overwrite:
+            return True
 
         # validate chunks
         if chunks is None:
@@ -138,6 +142,8 @@ def copy_dataset(input_path, input_key, output_path, output_key, is_h5,
         else:
             for bb in tqdm(blocking(shape, ds_chunks), total=n_blocks):
                 copy_chunk(bb)
+
+    return False
 
 
 def normalize_output_path(output_path):
@@ -266,8 +272,9 @@ def convert_to_bdv(input_path, input_key, output_path,
         return
 
     # validate the attributes
-    attributes_ = validate_attributes(xml_path, attributes, setup_id,
-                                      overwrite=overwrite_metadata)
+    # if overwrite_data or overwrite_metadata was set, we do not enforce consistency of the attributes
+    enforce_consistency = not (overwrite_data or overwrite_metadata)
+    attributes_ = validate_attributes(xml_path, attributes, setup_id, enforce_consistency)
 
     # we need to convert the dtype only for the hdf5 based storage
     if convert_dtype is None:
@@ -275,14 +282,16 @@ def convert_to_bdv(input_path, input_key, output_path,
 
     # copy the initial dataset
     base_key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=0)
-    copy_dataset(input_path, input_key,
-                 data_path, base_key, is_h5, convert_dtype=convert_dtype,
-                 chunks=chunks, n_threads=n_threads, overwrite=overwrite_data)
+    skip_downscaling = copy_dataset(input_path, input_key,
+                                    data_path, base_key, is_h5, convert_dtype=convert_dtype,
+                                    chunks=chunks, n_threads=n_threads, overwrite=overwrite_data)
 
     # downsample if needed
     if downscale_factors is None:
         # set single level downscale factor
         factors = [[1, 1, 1]]
+    elif skip_downscaling:
+        factors = [[1, 1, 1]] + downscale_factors
     else:
         factors = make_scales(data_path, downscale_factors, downscale_mode,
                               ndim, setup_id, is_h5,
@@ -305,7 +314,32 @@ def convert_to_bdv(input_path, input_key, output_path,
                        setup_name=setup_name,
                        affine=affine,
                        attributes=attributes_,
-                       overwrite=overwrite_metadata)
+                       overwrite=overwrite_metadata,
+                       overwrite_data=overwrite_data,
+                       enforce_consistency=enforce_consistency)
+
+
+def write_initial_dataset(data_path, setup_id, timepoint, data, chunks,
+                          is_h5, overwrite, n_threads):
+    base_key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=0)
+    with open_file(data_path, 'a') as f:
+
+        have_data = base_key in f
+        if have_data and not overwrite:
+            return True
+
+        # need to remove the previous data-set if we over-write
+        if have_data and overwrite:
+            del f[base_key]
+
+        ds = f.create_dataset(base_key, shape=data.shape, compression='gzip',
+                              chunks=chunks, dtype=data.dtype)
+
+        # if we have z5py, this will trigger multi-threaded write (otherwise no effect)
+        ds.n_threads = n_threads
+        ds[:] = data
+
+    return False
 
 
 def make_bdv(data, output_path,
@@ -370,7 +404,9 @@ def make_bdv(data, output_path,
         return
 
     # validate the attributes
-    attributes_ = validate_attributes(xml_path, attributes, setup_id, overwrite_metadata)
+    # if overwrite_data or overwrite_metadata was set, we do not enforce consistency of the attributes
+    enforce_consistency = not (overwrite_data or overwrite_metadata)
+    attributes_ = validate_attributes(xml_path, attributes, setup_id, enforce_consistency)
 
     # we need to convert the dtype only for the hdf5 based storage
     if convert_dtype is None:
@@ -386,24 +422,15 @@ def make_bdv(data, output_path,
         chunks_ = tuple(min(ch, sh) for sh, ch in zip(data.shape, chunks))
 
     # write initial dataset
-    base_key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=0)
-    with open_file(data_path, 'a') as f:
-
-        # need to remove the previous data-set if we over-write
-        if overwrite_data:
-            del f[base_key]
-
-        ds = f.create_dataset(base_key, shape=data.shape, compression='gzip',
-                              chunks=chunks_, dtype=data.dtype)
-
-        # if we have z5py, this will trigger multi-threaded write (otherwise no effect)
-        ds.n_threads = n_threads
-        ds[:] = data
+    skip_downscaling = write_initial_dataset(data_path, setup_id, timepoint, data, chunks_,
+                                             is_h5, overwrite_data, n_threads)
 
     # downsample if needed
     if downscale_factors is None:
         # set single level downscale factor
         factors = [[1, 1, 1]]
+    elif skip_downscaling:
+        factors = [[1, 1, 1]] + downscale_factors
     else:
         factors = make_scales(data_path, downscale_factors, downscale_mode,
                               ndim, setup_id, is_h5,
@@ -426,4 +453,6 @@ def make_bdv(data, output_path,
                        setup_name=setup_name,
                        affine=affine,
                        attributes=attributes_,
-                       overwrite=overwrite_metadata)
+                       overwrite=overwrite_metadata,
+                       overwrite_data=overwrite_data,
+                       enforce_consistency=enforce_consistency)
