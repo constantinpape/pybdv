@@ -12,6 +12,8 @@ from pybdv.util import open_file, HAVE_ELF
 class MetadataTestMixin(ABC):
     tmp_folder = './tmp'
     xml_path = './tmp/test.xml'
+    xml_path2 = './tmp/test2.xml'
+
     shape = (64,) * 3
     chunks = (32,) * 3
 
@@ -53,17 +55,46 @@ class MetadataTestMixin(ABC):
         abs_path = get_data_path(self.xml_path, return_absolute_path=True)
         self.assertEqual(abs_path, os.path.abspath(self.out_path))
 
+    def test_validate_attributes(self):
+        from pybdv.metadata import validate_attributes
+
+        attrs1 = {'channel': {'id': 0, 'name': 'foo'}}
+        attrs1_ = validate_attributes(self.xml_path, attrs1, 0, True)
+        self.assertEqual(attrs1, attrs1_)
+
+        attrs2 = {'channel': {'id': None, 'name': 'foo'}}
+        attrs2_exp = {'channel': {'id': 0, 'name': 'foo'}}
+        attrs2_ = validate_attributes(self.xml_path, attrs1, 0, True)
+        self.assertEqual(attrs2_exp, attrs2_)
+
+        attrs3 = {'channel': {'name': 'bar'}}
+        with self.assertRaises(ValueError):
+            validate_attributes(self.xml_path, attrs1, 1, True)
+
+        attrs4 = {'displaysettings': {'id': 0, 'name': 'baz', 'min': 0, 'max': 1, 'isset': True,
+                                      'color': [255, 255, 255, 255]}}
+        make_bdv(np.random.rand(*self.shape), self.out_path2, resolution=self.resolution1, chunks=self.chunks,
+                 attributes=attrs4)
+        attrs4 = {'displaysettings': {'id': 0, 'name': 'baz', 'min': 0, 'max': 1, 'isset': True,
+                                      'color': [255, 255, 255, 255]}}
+        attrs4_ = validate_attributes(self.xml_path2, attrs4, 1, True)
+        self.assertEqual(attrs4, attrs4_)
+
+        attrs5 = {'displaysettings': {'id': 1, 'name': 'biz', 'min': 0, 'max': 1}}
+        with self.assertRaises(ValueError):
+            validate_attributes(self.xml_path2, attrs5, 1, True)
+
 
 class TestMetadataH5(MetadataTestMixin, unittest.TestCase):
-    in_path = './tmp/in.h5'
     out_path = './tmp/test.h5'
+    out_path2 = './tmp/test2.h5'
     bdv_format = 'bdv.hdf5'
 
 
 @unittest.skipUnless(HAVE_ELF, "Need elf for n5 support")
 class TestMetadataN5(MetadataTestMixin, unittest.TestCase):
-    in_path = './tmp/in.n5'
     out_path = './tmp/test.n5'
+    out_path2 = './tmp/test2.n5'
     bdv_format = 'bdv.n5'
 
 

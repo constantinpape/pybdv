@@ -4,6 +4,8 @@ import xml.etree.ElementTree as ET
 from numbers import Number
 from .util import open_file, get_key
 
+MANDATORY_DISPLAY_SETTINGS = {'min', 'max', 'isset', 'color'}
+
 
 # pretty print xml, from:
 # http://effbot.org/zone/element-lib.htm#prettyprint
@@ -122,7 +124,7 @@ def _initialize_attributes(viewsets, attributes):
         xml_name = att_name.capitalize()
         attr_setup = ET.SubElement(attrsets, xml_name)
         for name, val in att_values.items():
-            ET.SubElement(attr_setup, name).text = str(val)
+            ET.SubElement(attr_setup, name).text = " ".join(map(str, val)) if isinstance(val, list) else str(val)
 
 
 def _update_attributes(viewsets, attributes, overwrite):
@@ -169,7 +171,7 @@ def _update_attributes(viewsets, attributes, overwrite):
         else:
             attr_setup = ET.SubElement(attrset, xml_name)
             for name, val in this_values.items():
-                ET.SubElement(attr_setup, name).text = str(val)
+                ET.SubElement(attr_setup, name).text = " ".join(map(str, val)) if isinstance(val, list) else str(val)
 
 
 def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
@@ -401,14 +403,22 @@ def _validate_attribute_dict(this_attributes, this_attribute_values,
     # validate the id
     this_id = _validate_attribute_id(this_attributes, this_id, xml_ids, enforce_consistency, name)
 
+    # extra checks for display settings, which needs some additional keys
+    if name == 'displaysettings':
+        value_names = set(this_attribute_values.keys())
+        if len(MANDATORY_DISPLAY_SETTINGS - value_names) != 0:
+            raise ValueError("Not all mandatory display settings were passed")
+
     # make output values and check that all other attribute values are of simple type
     values_out = {'id': this_id}
     for k, v in this_attribute_values.items():
         if k == 'id':
             continue
         # check simple type
-        if not (isinstance(v, str) or isinstance(v, Number)):
-            raise ValueError("Attribute values must be string, bool or number, got %s" % type(v))
+        if not (isinstance(v, (str, list, Number))):
+            raise ValueError("Attribute values must be list, string, bool or number, got %s" % type(v))
+        if isinstance(v, list) and not all(isinstance(vv, (str, Number)) for vv in v):
+            raise ValueError("List attributes can only contain simple types")
         values_out[k] = v
 
     return values_out
@@ -460,22 +470,30 @@ def _validate_existing_attributes(setups, setup_id, attributes, enforce_consiste
 
 def _validate_new_attributes(attributes):
 
-    def _validate_new(value):
+    def _validate_new(name, value):
         if not isinstance(value, dict):
             raise ValueError("Expected dict, got %s" % type(value))
 
         if 'id' not in value:
             raise ValueError("Attribute values must to contain entry 'id'")
 
+        # extra checks for display settings, which needs some additional keys
+        if name == 'displaysettings':
+            value_names = set(value.keys())
+            if len(MANDATORY_DISPLAY_SETTINGS - value_names) != 0:
+                raise ValueError("Not all mandatory display settings were passed")
+
         new_value = {}
         for k, v in value.items():
             v = 0 if (k == 'id' and v is None) else v
-            if not (isinstance(v, str) or isinstance(v, Number)):
-                raise ValueError("Attribute values must be string, bool or number, got %s" % type(v))
+            if isinstance(v, list) and not all(isinstance(vv, (str, Number)) for vv in v):
+                raise ValueError("List attributes can only contain simple types")
+            elif not isinstance(v, (str, Number, list)):
+                raise ValueError("Attribute values must be list, string, bool or number, got %s" % type(v))
             new_value[k] = v
         return new_value
 
-    attrs_out = {k: _validate_new(v) for k, v in attributes.items()}
+    attrs_out = {k: _validate_new(k, v) for k, v in attributes.items()}
     return attrs_out
 
 
