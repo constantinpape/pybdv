@@ -156,7 +156,7 @@ def _update_attributes(viewsets, attributes, overwrite):
                 if int(attr_setup.find('id').text) != this_id:
                     continue
 
-                for name, val in this_values:
+                for name, val in this_values.items():
                     elem = attr_setup.find(name)
                     if elem is None:
                         elem = ET.SubElement(attr_setup, name)
@@ -166,6 +166,7 @@ def _update_attributes(viewsets, attributes, overwrite):
         # -> do nothing
         elif has_id and not overwrite:
             continue
+
         # no, we don't have it
         # -> write the new attribute setup
         else:

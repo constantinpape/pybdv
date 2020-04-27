@@ -291,7 +291,7 @@ def convert_to_bdv(input_path, input_key, output_path,
         # set single level downscale factor
         factors = [[1, 1, 1]]
     elif skip_downscaling:
-        factors = [[1, 1, 1]] + downscale_factors
+        factors = [[1, 1, 1]] + list(downscale_factors)
     else:
         factors = make_scales(data_path, downscale_factors, downscale_mode,
                               ndim, setup_id, is_h5,
@@ -430,7 +430,7 @@ def make_bdv(data, output_path,
         # set single level downscale factor
         factors = [[1, 1, 1]]
     elif skip_downscaling:
-        factors = [[1, 1, 1]] + downscale_factors
+        factors = [[1, 1, 1]] + list(downscale_factors)
     else:
         factors = make_scales(data_path, downscale_factors, downscale_mode,
                               ndim, setup_id, is_h5,
