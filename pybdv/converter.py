@@ -5,7 +5,7 @@ from concurrent import futures
 from tqdm import tqdm
 
 from .util import (blocking, get_nblocks, open_file, get_key,
-                   HAVE_ELF, HDF5_EXTENSIONS, N5_EXTENSIONS, XML_EXTENSIONS)
+                   HDF5_EXTENSIONS, N5_EXTENSIONS, XML_EXTENSIONS)
 from .metadata import (get_setup_ids, get_timeponts,
                        validate_affine, validate_attributes,
                        write_h5_metadata, write_xml_metadata, write_n5_metadata)
@@ -160,8 +160,6 @@ def normalize_output_path(output_path):
         data_path = base_path + '.h5'
         xml_path = output_path
     elif ext.lower() in N5_EXTENSIONS:
-        if not HAVE_ELF:
-            raise ValueError("Can only write n5 with elf.")
         data_path = output_path
         xml_path = base_path + '.xml'
         is_h5 = False

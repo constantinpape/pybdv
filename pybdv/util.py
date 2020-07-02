@@ -2,19 +2,37 @@ import os
 from itertools import product
 import numpy as np
 
+# check if we have elf and use it's open_file implementation
 try:
     from elf.io import open_file
-    HAVE_ELF = True
 except ImportError:
-    import h5py
-    HAVE_ELF = False
-    # only supprt h5py if we don't have elf
-    open_file = h5py.File
+    open_file = None
 
 
 HDF5_EXTENSIONS = ['.h5', '.hdf', '.hdf5']
 XML_EXTENSIONS = ['.xml']
 N5_EXTENSIONS = ['.n5']
+
+
+# if we don't have elf, define a simplified open_file function
+if open_file is None:
+    import h5py
+
+    try:
+        import z5py
+    except ImportError:
+        z5py = None
+
+    def open_file(path, mode='r'):
+        ext = os.path.splitext(path).lower()
+        if ext in HDF5_EXTENSIONS:
+            return h5py.File(path, mode=mode)
+        elif ext in N5_EXTENSIONS:
+            if z5py is None:
+                raise ValueError("Need z5py to open n5 files")
+            return z5py.File(path, mode=mode)
+        else:
+            raise ValueError(f"Invalid extension: {ext}")
 
 
 def get_key(is_h5, timepoint=None, setup_id=None, scale=None):
