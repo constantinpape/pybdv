@@ -15,7 +15,7 @@ from .dtypes import convert_to_bdv_dtype, get_new_dtype
 OVERWRITE_OPTIONS = ('skip', 'data', 'metadata', 'all')
 
 
-def handle_setup_id(setup_id, xml_path, timepoint, overwrite):
+def handle_setup_id(setup_id, xml_path, timepoint, overwrite, is_h5):
 
     # check if we have this setup_id and timepoint already
     have_timepoint = False
@@ -87,7 +87,7 @@ def handle_setup_id(setup_id, xml_path, timepoint, overwrite):
     if msg is not None:
         warn(msg)
 
-    if setup_id >= 100:
+    if is_h5 and setup_id >= 100:
         raise ValueError("Only up to 100 set-ups are supported")
     return setup_id, overwrite_data, overwrite_metadata, skip
 
@@ -265,7 +265,8 @@ def convert_to_bdv(input_path, input_key, output_path,
     setup_id, overwrite_data, overwrite_metadata, skip = handle_setup_id(setup_id,
                                                                          xml_path,
                                                                          timepoint,
-                                                                         overwrite)
+                                                                         overwrite,
+                                                                         is_h5)
     if skip:
         return
 
@@ -397,7 +398,8 @@ def make_bdv(data, output_path,
     setup_id, overwrite_data, overwrite_metadata, skip = handle_setup_id(setup_id,
                                                                          xml_path,
                                                                          timepoint,
-                                                                         overwrite)
+                                                                         overwrite,
+                                                                         is_h5)
     if skip:
         return
 
