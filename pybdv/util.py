@@ -24,7 +24,7 @@ if open_file is None:
         z5py = None
 
     def open_file(path, mode='r'):
-        ext = os.path.splitext(path).lower()
+        ext = os.path.splitext(path)[1].lower()
         if ext in HDF5_EXTENSIONS:
             return h5py.File(path, mode=mode)
         elif ext in N5_EXTENSIONS:
