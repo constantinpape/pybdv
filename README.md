@@ -73,4 +73,4 @@ The downscale factors need to be encoded as json list.
 
 ### Conversion to n5-bdv format
 
-Bigdatviewer core also supports an [n5 based data format](https://github.com/bigdataviewer/bigdataviewer-core/blob/master/BDV%20N5%20format.md). The data can be converted to this format by passing a path with n5 ending as output path: `/path/to/out.n5`. In order to support this, [elf](https://github.com/constantinpape/elf) needs to be installed.
+Bigdatviewer core also supports an [n5 based data format](https://github.com/bigdataviewer/bigdataviewer-core/blob/master/BDV%20N5%20format.md). The data can be converted to this format by passing a path with n5 ending as output path: `/path/to/out.n5`. In order to support this, you need to install [z5py](https://github.com/constantinpape/z5). In addtion, [elf](https://github.com/constantinpape/elf) can be used to support additional input formats.

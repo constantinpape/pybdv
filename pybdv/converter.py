@@ -204,8 +204,12 @@ def convert_to_bdv(input_path, input_key, output_path,
                    overwrite='skip', convert_dtype=None, chunks=None, n_threads=1):
     """ Convert hdf5 volume to BigDatViewer format.
 
-    Optionally downscale the input volume and write it
-    to BigDataViewer scale pyramid.
+    Optionally downscale the input volume and write it to BigDataViewer scale pyramid.
+    Note that the default axis conventions of numpy and the native BDV implementation are
+    different. Numpy uses C-axis order, BDV uses F-axis order. Hence the shape of the
+    input data (Z,Y,X) will be stored as (X,Y,Z) in the metada. This also applies
+    to the values for the parameters resolution and downscale_factors: they need
+    to be passed as (Z,Y,X) and will be stored as (X,Y,Z).
 
     Arguments:
         input_path (str): path to hdf5 input volume
@@ -349,7 +353,12 @@ def make_bdv(data, output_path,
              overwrite='skip', convert_dtype=None, chunks=None, n_threads=1):
     """ Write data in BigDatViewer file format for one view setup and timepoint.
 
-    Optionally downscale the input data to multi-scale image pyramid.
+    Optionally downscale the input volume and write it to BigDataViewer scale pyramid.
+    Note that the default axis conventions of numpy and the native BDV implementation are
+    different. Numpy uses C-axis order, BDV uses F-axis order. Hence the shape of the
+    input data (Z,Y,X) will be stored as (X,Y,Z) in the metada. This also applies
+    to the values for the parameters resolution and downscale_factors: they need
+    to be passed as (Z,Y,X) and will be stored as (X,Y,Z).
 
     Arguments:
         data (np.ndarray): input data
