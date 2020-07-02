@@ -5,7 +5,12 @@ from shutil import rmtree
 
 import numpy as np
 from pybdv import make_bdv
-from pybdv.util import open_file, HAVE_ELF
+from pybdv.util import open_file
+
+try:
+    import z5py
+except ImportError:
+    z5py = None
 
 
 
@@ -91,7 +96,7 @@ class TestMetadataH5(MetadataTestMixin, unittest.TestCase):
     bdv_format = 'bdv.hdf5'
 
 
-@unittest.skipUnless(HAVE_ELF, "Need elf for n5 support")
+@unittest.skipUnless(z5py is not None, "Need z5py for n5 support")
 class TestMetadataN5(MetadataTestMixin, unittest.TestCase):
     out_path = './tmp/test.n5'
     out_path2 = './tmp/test2.n5'

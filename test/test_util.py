@@ -5,7 +5,11 @@ from shutil import rmtree
 
 import numpy as np
 from pybdv import make_bdv
-from pybdv.util import HAVE_ELF
+
+try:
+    import z5py
+except ImportError:
+    z5py = None
 
 
 class UtilTestMixin(ABC):
@@ -80,7 +84,7 @@ class TestUtilH5(UtilTestMixin, unittest.TestCase):
     out_path = './tmp/test.h5'
 
 
-@unittest.skipUnless(HAVE_ELF, "Need elf for n5 support")
+@unittest.skipUnless(z5py is not None, "Need z5py for n5 support")
 class TestConvertToBdvN5(UtilTestMixin, unittest.TestCase):
     out_path = './tmp/test.n5'
 
