@@ -73,4 +73,48 @@ The downscale factors need to be encoded as json list.
 
 ### Conversion to n5-bdv format
 
-Bigdatviewer core also supports an [n5 based data format](https://github.com/bigdataviewer/bigdataviewer-core/blob/master/BDV%20N5%20format.md). The data can be converted to this format by passing a path with n5 ending as output path: `/path/to/out.n5`. In order to support this, you need to install [z5py](https://github.com/constantinpape/z5). In addtion, [elf](https://github.com/constantinpape/elf) can be used to support additional input formats.
+Bigdatviewer core also supports an [n5 based data format](https://github.com/bigdataviewer/bigdataviewer-core/blob/master/BDV%20N5%20format.md). The data can be converted to this format by passing a path with n5 ending as output path: `/path/to/out.n5`. In order to support this, you need to install [z5py](https://github.com/constantinpape/z5).
+
+
+### Advanced IO options
+
+If [elf](https://github.com/constantinpape/elf) is available, additional file input formats are supported.
+For example, it is possible to convert inputs from tif slices
+
+```python
+import os
+import imageio
+import numpy as np
+from pybdv import convert_to_bdv
+
+
+input_path = './slices'
+os.makedirs(input_path, exist_ok=True)
+n_slices = 25
+shape = (256, 256)
+
+for slice_id in range(n_slices):
+    imageio.imsave('./slices/im%03i.tif', np.random.randint(0, 255, size=shape, dtype='uint8'))
+
+input_key = '*.tif'
+output_path = 'from_slices.h5'
+convert_to_bdv(input_path, input_key, output_path)
+```
+
+or tif stacks:
+
+```python
+import imageio
+import numpy as np
+from pybdv import convert_to_bdv
+
+
+input_path = './stack.tif'
+shape = (25, 256, 256)
+
+imageio.volsave(input_path, np.random.randint(0, 255, size=shape, dtype='uint8'))
+
+input_key = ''
+output_path = 'from_stack.h5'
+convert_to_bdv(input_path, input_key, output_path)
+```
