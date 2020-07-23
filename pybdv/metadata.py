@@ -638,6 +638,32 @@ def _write_transformation(vregs, setup_id, timepoint, affine, resolution, overwr
     write_trafo(vreg)
 
 
+def write_affine(xml_path, setup_id, affine, overwrite, timepoint=0):
+    """ Write affine transformation for given setup id from xml.
+
+    Arguments:
+        xml_path (str): path to the xml file with the bdv metadata
+        setup_id (int): setup id for which the affine trafo(s) should be loaded
+        affine (list[int] or dict[list[int]]): affine transformation(s)
+        overwrite (bool): whether to over-write existing transformations or add the new one
+        timepoint (int): time point for which to load the affine (default: 0)
+    """
+
+    # validate the input transformation and write it to the metadta
+    validate_affine(affine)
+    root = ET.parse(xml_path).getroot()
+    vregs = root.find('ViewRegistrations')
+    _write_transformation(vregs, setup_id, timepoint,
+                          affine=affine,
+                          resolution=None,
+                          overwrite=overwrite)
+
+    # write the xml
+    indent_xml(root)
+    tree = ET.ElementTree(root)
+    tree.write(xml_path)
+
+
 def get_affine(xml_path, setup_id, timepoint=0):
     """ Get affine transformation for given setup id from xml.
 
