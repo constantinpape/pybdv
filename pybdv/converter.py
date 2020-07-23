@@ -5,7 +5,7 @@ from concurrent import futures
 from tqdm import tqdm
 
 from .util import (blocking, get_nblocks, open_file, get_key,
-                   HAVE_ELF, HDF5_EXTENSIONS, N5_EXTENSIONS, XML_EXTENSIONS)
+                   HDF5_EXTENSIONS, N5_EXTENSIONS, XML_EXTENSIONS)
 from .metadata import (get_setup_ids, get_timeponts,
                        validate_affine, validate_attributes,
                        write_h5_metadata, write_xml_metadata, write_n5_metadata)
@@ -15,7 +15,7 @@ from .dtypes import convert_to_bdv_dtype, get_new_dtype
 OVERWRITE_OPTIONS = ('skip', 'data', 'metadata', 'all')
 
 
-def handle_setup_id(setup_id, xml_path, timepoint, overwrite):
+def handle_setup_id(setup_id, xml_path, timepoint, overwrite, is_h5):
 
     # check if we have this setup_id and timepoint already
     have_timepoint = False
@@ -87,7 +87,7 @@ def handle_setup_id(setup_id, xml_path, timepoint, overwrite):
     if msg is not None:
         warn(msg)
 
-    if setup_id >= 100:
+    if is_h5 and setup_id >= 100:
         raise ValueError("Only up to 100 set-ups are supported")
     return setup_id, overwrite_data, overwrite_metadata, skip
 
@@ -160,8 +160,6 @@ def normalize_output_path(output_path):
         data_path = base_path + '.h5'
         xml_path = output_path
     elif ext.lower() in N5_EXTENSIONS:
-        if not HAVE_ELF:
-            raise ValueError("Can only write n5 with elf.")
         data_path = output_path
         xml_path = base_path + '.xml'
         is_h5 = False
@@ -206,8 +204,12 @@ def convert_to_bdv(input_path, input_key, output_path,
                    overwrite='skip', convert_dtype=None, chunks=None, n_threads=1):
     """ Convert hdf5 volume to BigDatViewer format.
 
-    Optionally downscale the input volume and write it
-    to BigDataViewer scale pyramid.
+    Optionally downscale the input volume and write it to BigDataViewer scale pyramid.
+    Note that the default axis conventions of numpy and the native BDV implementation are
+    different. Numpy uses C-axis order, BDV uses F-axis order. Hence the shape of the
+    input data (Z,Y,X) will be stored as (X,Y,Z) in the metada. This also applies
+    to the values for the parameters resolution and downscale_factors: they need
+    to be passed as (Z,Y,X) and will be stored as (X,Y,Z).
 
     Arguments:
         input_path (str): path to hdf5 input volume
@@ -267,7 +269,8 @@ def convert_to_bdv(input_path, input_key, output_path,
     setup_id, overwrite_data, overwrite_metadata, skip = handle_setup_id(setup_id,
                                                                          xml_path,
                                                                          timepoint,
-                                                                         overwrite)
+                                                                         overwrite,
+                                                                         is_h5)
     if skip:
         return
 
@@ -350,7 +353,12 @@ def make_bdv(data, output_path,
              overwrite='skip', convert_dtype=None, chunks=None, n_threads=1):
     """ Write data in BigDatViewer file format for one view setup and timepoint.
 
-    Optionally downscale the input data to multi-scale image pyramid.
+    Optionally downscale the input volume and write it to BigDataViewer scale pyramid.
+    Note that the default axis conventions of numpy and the native BDV implementation are
+    different. Numpy uses C-axis order, BDV uses F-axis order. Hence the shape of the
+    input data (Z,Y,X) will be stored as (X,Y,Z) in the metada. This also applies
+    to the values for the parameters resolution and downscale_factors: they need
+    to be passed as (Z,Y,X) and will be stored as (X,Y,Z).
 
     Arguments:
         data (np.ndarray): input data
@@ -399,7 +407,8 @@ def make_bdv(data, output_path,
     setup_id, overwrite_data, overwrite_metadata, skip = handle_setup_id(setup_id,
                                                                          xml_path,
                                                                          timepoint,
-                                                                         overwrite)
+                                                                         overwrite,
+                                                                         is_h5)
     if skip:
         return
 
