@@ -600,7 +600,7 @@ def _write_transformation(vregs, setup_id, timepoint, affine, resolution, overwr
                 vt = ET.SubElement(vreg, 'ViewTransform')
                 vt.set('type', 'affine')
                 ET.SubElement(vt, 'affine').text = ' '.join([str(aff) for aff in affs])
-                ET.SubElement(vt, 'Name').text = name
+                ET.SubElement(vt, 'name').text = name
         else:
             if affine is None:
                 dz, dy, dx = resolution
