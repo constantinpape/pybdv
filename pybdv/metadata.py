@@ -599,7 +599,7 @@ def _write_transformation(vregs, setup_id, timepoint, affine, resolution, overwr
             for name, affs in affine.items():
                 vt = ET.SubElement(vreg, 'ViewTransform')
                 vt.set('type', 'affine')
-                ET.SubElement(vt, 'affine').text = ' '.join([str(aff) for aff in affs])
+                ET.SubElement(vt, 'affine').text = ' '.join(['{:.4f}'.format(aff) for aff in affs])
                 ET.SubElement(vt, 'name').text = name
         else:
             if affine is None:
@@ -609,7 +609,7 @@ def _write_transformation(vregs, setup_id, timepoint, affine, resolution, overwr
                                                                            dy, oy,
                                                                            dz, oz)
             else:
-                trafo = ' '.join([str(aff) for aff in affine])
+                trafo = ' '.join(['{:.4f}'.format(aff) for aff in affine])
             vt = ET.SubElement(vreg, 'ViewTransform')
             vt.set('type', 'affine')
             ET.SubElement(vt, 'affine').text = trafo
