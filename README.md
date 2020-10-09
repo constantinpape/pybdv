@@ -1,6 +1,6 @@
 [![Build Status](https://travis-ci.org/constantinpape/pybdv.svg?branch=master)](https://travis-ci.org/constantinpape/pybdv)
 
-# PyBdv
+# pyBDV
 
 Python tools for [BigDataViewer](https://imagej.net/BigDataViewer).
 
