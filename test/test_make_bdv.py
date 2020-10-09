@@ -277,7 +277,7 @@ class MakeBdvTestMixin(ABC):
             self.assertEqual(attrs, exp_attrs)
 
             affine = get_affine(self.xml_path, setup_id=0, timepoint=0)['affine0']
-            self.assertTrue(np.allclose(np.array(affine), np.array(exp_affine)))
+            self.assertTrue(np.allclose(np.array(affine), np.array(exp_affine), atol=1e-4))
 
         shape1 = (64,) * 3
         data1 = np.random.rand(*shape1)

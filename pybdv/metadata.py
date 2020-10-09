@@ -599,7 +599,9 @@ def _write_transformation(vregs, setup_id, timepoint, affine, resolution, overwr
             for name, affs in affine.items():
                 vt = ET.SubElement(vreg, 'ViewTransform')
                 vt.set('type', 'affine')
-                ET.SubElement(vt, 'affine').text = ' '.join(['{:.4f}'.format(aff) for aff in affs])
+                ET.SubElement(vt, 'affine').text = ' '.join(map(str, affs))
+                # NOTE for CP: truncating the number of digits here is not a good idea
+                # ET.SubElement(vt, 'affine').text = ' '.join(['{:.4f}'.format(aff) for aff in affs])
                 ET.SubElement(vt, 'name').text = name
         else:
             if affine is None:
@@ -609,7 +611,9 @@ def _write_transformation(vregs, setup_id, timepoint, affine, resolution, overwr
                                                                            dy, oy,
                                                                            dz, oz)
             else:
-                trafo = ' '.join(['{:.4f}'.format(aff) for aff in affine])
+                # NOTE for CP: truncating the number of digits here is not a good idea
+                # trafo = ' '.join(['{:.4f}'.format(aff) for aff in affine])
+                trafo = ' '.join(map(str, affine))
             vt = ET.SubElement(vreg, 'ViewTransform')
             vt.set('type', 'affine')
             ET.SubElement(vt, 'affine').text = trafo
@@ -688,7 +692,7 @@ def get_affine(xml_path, setup_id, timepoint=0):
         ii = 0
         affine = {}
         for vt in vreg.findall('ViewTransform'):
-            name = vt.find('Name')
+            name = vt.find('name')
             if name is None:
                 name = 'affine%i' % ii
             else:
