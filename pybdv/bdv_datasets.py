@@ -2,7 +2,7 @@
 import os
 import numpy as np
 import json
-from .util import open_file
+from .util import open_file, get_scale_factors, get_key, HDF5_EXTENSIONS
 from .converter import make_bdv
 from shutil import rmtree
 
@@ -40,7 +40,7 @@ def _check_for_out_of_bounds(position, volume, full_shape, verbose=False):
 
 
 def _check_shape_and_position_scaling(max_scale, position, volume,
-                                      data_path, setup_id, timepoint,
+                                      data_path, key,
                                       verbose=False):
     vol_shape = np.array(volume.shape)
     if ((position / max_scale) - (position / max_scale).astype(int)).max()\
@@ -62,7 +62,7 @@ def _check_shape_and_position_scaling(max_scale, position, volume,
             print(f'target_pos = {target_pos}')
             print(f'target_shape = {target_shape}')
         with open_file(data_path, mode='r') as f:
-            target_vol = f[f'setup{setup_id}/timepoint{timepoint}/s0'][
+            target_vol = f[key][
                 target_pos[0]: target_pos[0] + target_shape[0],
                 target_pos[1]: target_pos[1] + target_shape[1],
                 target_pos[2]: target_pos[2] + target_shape[2]
@@ -93,9 +93,12 @@ def _scale_and_add_to_dataset(
         target_pos, target_vol, target_shape,
         scales, downscale_mode, n_threads):
 
+    is_h5 = os.path.splitext(data_path)[1] in HDF5_EXTENSIONS
+
     # Perform scaling of volume, by generating a temporary bdv file
     # FIXME it is probably sufficient to keep it in memory, since I assume that the volume is in memory anyways, but the
     # FIXME     make_bdv function is so very convenient right now...
+    scales = np.array(scales)
     scale_factors = scales[1: 2].tolist()
     tmp_name = os.path.join(data_path, f'tmp_{np.random.randint(0, 2 ** 16, dtype="uint16")}')
     tmp_bdv = tmp_name + '.n5'
@@ -118,11 +121,13 @@ def _scale_and_add_to_dataset(
 
         # Write the data to each scale
         with open_file(tmp_bdv, mode='r') as f:
-            scaled_vol = f[f'setup0/timepoint0/s{scale_id}'][:]
+            key = get_key(is_h5, timepoint=0, setup_id=0, scale=scale_id)
+            scaled_vol = f[key][:]
             # assert list(scaled_vol.shape) == shp_in_scale.tolist()
 
         with open_file(data_path, mode='a') as f:
-            f[f'setup{setup_id}/timepoint{timepoint}/s{scale_id}'][
+            key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=scale_id)
+            f[key][
                 pos_in_scale[0]: pos_in_scale[0] + shp_in_scale[0],
                 pos_in_scale[1]: pos_in_scale[1] + shp_in_scale[1],
                 pos_in_scale[2]: pos_in_scale[2] + shp_in_scale[2]
@@ -141,42 +146,46 @@ class BdvDataset:
     The full resolution area is padded, if necessary, to avoid sub-pixel locations in the down-sampling layers
     """
 
-    def __init__(self, path, timepoint, setup_id, n_threads=1, verbose=False):
+    def __init__(self, path, timepoint, setup_id, downscale_mode='interpolate', n_threads=1, verbose=False):
 
         self._path = path
         self._timepoint = timepoint
         self._setup_id = setup_id
+        self._downscale_mode = downscale_mode
         self._n_threads = n_threads
         self._verbose = verbose
 
-    def _add_to_volume(self, position, volume):
+        # Check if it is h5 or n5
+        self._is_h5 = os.path.splitext(path)[1] in HDF5_EXTENSIONS
 
-        # Determine required scales
-        with open(os.path.join(self._path, 'setup{}'.format(self._setup_id), 'attributes.json')) as f:
-            scales = np.array(json.load(f)['downsamplingFactors'])
+        # Get the scales
+        self._scales = get_scale_factors(self._path, self._setup_id)
 
         # Determine full dataset shape
         with open_file(self._path, mode='r') as f:
-            full_shape = f[f'setup{self._setup_id}/timepoint{self._timepoint}/s0'].shape
+            self._key = get_key(self._is_h5, timepoint=timepoint, setup_id=setup_id, scale=0)
+            self._full_shape = f[self._key].shape
+
+    def _add_to_volume(self, position, volume):
 
         if self._verbose:
-            print(f'scales = {scales}')
-            print(f'full_shape = {full_shape}')
+            print(f'scales = {self._scales}')
+            print(f'full_shape = {self._full_shape}')
 
         # Check for out of bounds (and fix it if not)
-        position, volume = _check_for_out_of_bounds(position, volume, full_shape, verbose=self._verbose)
+        position, volume = _check_for_out_of_bounds(position, volume, self._full_shape, verbose=self._verbose)
 
         # Check if volume and position properly scale to the final scale level (and fix it if not)
-        max_scale = scales[-1]
+        max_scale = self._scales[-1]
         target_vol, target_pos, target_shape = _check_shape_and_position_scaling(
             max_scale, position, volume,
-            self._path, self._setup_id, self._timepoint,
+            self._path, self._key,
             verbose=self._verbose)
 
         # Scale volume and write to target dataset
         _scale_and_add_to_dataset(self._path, self._setup_id, self._timepoint,
                                   target_pos, target_vol, target_shape,
-                                  scales, 'interpolate',
+                                  self._scales, self._downscale_mode,
                                   self._n_threads)
 
     def __setitem__(self, key, value):
@@ -193,11 +202,11 @@ class BdvDataset:
 # TODO Implement this one that includes stitching operations
 class BdvDatasetWithStitching(BdvDataset):
 
-    def __init__(self, path, timepoint, setup_id, n_threads=1, halo=None, verbose=False):
+    def __init__(self, path, timepoint, setup_id, downscale_mode='interpolate', n_threads=1, halo=None, verbose=False):
 
         self._halo = halo
 
-        super().__init__(path, timepoint, setup_id, n_threads=n_threads, verbose=verbose)
+        super().__init__(path, timepoint, setup_id, downscale_mode='interpolate', n_threads=n_threads, verbose=verbose)
 
     def set_halo(self, halo):
         """
