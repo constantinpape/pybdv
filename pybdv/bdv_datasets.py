@@ -1,0 +1,213 @@
+
+import os
+import numpy as np
+import json
+from .util import open_file
+from .converter import make_bdv
+from shutil import rmtree
+
+
+def _check_for_out_of_bounds(position, volume, full_shape, verbose=False):
+
+    position = np.array(position)
+    full_shape = np.array(full_shape)
+
+    vol_shape = np.array(volume.shape)
+    if position.min() < 0 or (position + vol_shape - full_shape).max() > 0:
+
+        print(f'position = {position}')
+
+        too_large = (position + vol_shape - full_shape) > 0
+        source_ends = vol_shape
+        source_ends[too_large] = (full_shape - position)[too_large]
+
+        source_starts = np.zeros((3,), dtype=int)
+        source_starts[position < 0] = -position[position < 0]
+        position[position < 0] = 0
+
+        if verbose:
+            print(f'source_starts = {source_starts}')
+            print(f'source_ends = {source_ends}')
+            print(f'position = {position}')
+
+        volume = volume[
+            source_starts[0]: source_ends[0],
+            source_starts[1]: source_ends[1],
+            source_starts[2]: source_ends[2]
+        ]
+
+    return position, volume
+
+
+def _check_shape_and_position_scaling(max_scale, position, volume,
+                                      data_path, setup_id, timepoint,
+                                      verbose=False):
+    vol_shape = np.array(volume.shape)
+    if ((position / max_scale) - (position / max_scale).astype(int)).max()\
+            or ((vol_shape / max_scale) - (vol_shape / max_scale).astype(int)).max():
+
+        # They don't scale properly:
+        # So, we have to read a volume from the target data (largest scale) that does and covers the area of where the
+        # volume belongs, which we here call target_vol with respective properties target_pos and target_shape
+
+        if verbose:
+            print('----------------------')
+            print(f'max_scale = {max_scale}')
+            print(f'position = {position}')
+            print(f'vol_shape = {vol_shape}')
+            print('----------------------')
+        target_pos = max_scale * (position / max_scale).astype(int)
+        target_shape = max_scale * np.ceil((position + vol_shape) / max_scale).astype(int) - target_pos
+        if verbose:
+            print(f'target_pos = {target_pos}')
+            print(f'target_shape = {target_shape}')
+        with open_file(data_path, mode='r') as f:
+            target_vol = f[f'setup{setup_id}/timepoint{timepoint}/s0'][
+                target_pos[0]: target_pos[0] + target_shape[0],
+                target_pos[1]: target_pos[1] + target_shape[1],
+                target_pos[2]: target_pos[2] + target_shape[2]
+            ]
+        if verbose:
+            print(f'target_vol.shape = {target_vol.shape}')
+
+        # Now we have to put the volume to this target_vol at the proper position
+        in_target_pos = position - target_pos
+        target_vol[
+            in_target_pos[0]: in_target_pos[0] + volume.shape[0],
+            in_target_pos[1]: in_target_pos[1] + volume.shape[1],
+            in_target_pos[2]: in_target_pos[2] + volume.shape[2]
+        ] = volume
+
+    else:
+
+        # Everything scales nicely, so we just have to take care that the proper variables exist
+        target_vol = volume
+        target_pos = position
+        target_shape = vol_shape
+
+    return target_vol, target_pos, target_shape
+
+
+def _scale_and_add_to_dataset(
+        data_path, setup_id, timepoint,
+        target_pos, target_vol, target_shape,
+        scales, downscale_mode, n_threads):
+
+    # Perform scaling of volume, by generating a temporary bdv file
+    # FIXME it is probably sufficient to keep it in memory, since I assume that the volume is in memory anyways, but the
+    # FIXME     make_bdv function is so very convenient right now...
+    scale_factors = scales[1: 2].tolist()
+    tmp_name = os.path.join(data_path, f'tmp_{np.random.randint(0, 2 ** 16, dtype="uint16")}')
+    tmp_bdv = tmp_name + '.n5'
+    for scale in scales[2:]:
+        scale_factors.append((scale / np.product(scale_factors, axis=0)).astype(int).tolist())
+    make_bdv(
+        data=target_vol,
+        output_path=tmp_bdv,
+        downscale_factors=scale_factors,
+        downscale_mode=downscale_mode,
+        n_threads=n_threads
+    )
+
+    # Now, we just need to fetch the scaled data and put it to the proper positions
+    for scale_id, scale in enumerate(scales):
+
+        # Position in the current scale
+        pos_in_scale = (target_pos / scale).astype(int)
+        shp_in_scale = (target_shape / scale).astype(int)
+
+        # Write the data to each scale
+        with open_file(tmp_bdv, mode='r') as f:
+            scaled_vol = f[f'setup0/timepoint0/s{scale_id}'][:]
+            # assert list(scaled_vol.shape) == shp_in_scale.tolist()
+
+        with open_file(data_path, mode='a') as f:
+            f[f'setup{setup_id}/timepoint{timepoint}/s{scale_id}'][
+                pos_in_scale[0]: pos_in_scale[0] + shp_in_scale[0],
+                pos_in_scale[1]: pos_in_scale[1] + shp_in_scale[1],
+                pos_in_scale[2]: pos_in_scale[2] + shp_in_scale[2]
+            ] = scaled_vol
+
+    # Delete the temporary bdv file
+    rmtree(tmp_bdv)
+    os.remove(tmp_name + '.xml')
+
+
+class BdvDataset:
+    """
+    The basic BDV dataset to which volumes can be written using numpy nomenclature.
+
+    The data is included into each of the down-sampling layers accordingly
+    The full resolution area is padded, if necessary, to avoid sub-pixel locations in the down-sampling layers
+    """
+
+    def __init__(self, path, timepoint, setup_id, n_threads=1, verbose=False):
+
+        self._path = path
+        self._timepoint = timepoint
+        self._setup_id = setup_id
+        self._n_threads = n_threads
+        self._verbose = verbose
+
+    def _add_to_volume(self, position, volume):
+
+        # Determine required scales
+        with open(os.path.join(self._path, 'setup{}'.format(self._setup_id), 'attributes.json')) as f:
+            scales = np.array(json.load(f)['downsamplingFactors'])
+
+        # Determine full dataset shape
+        with open_file(self._path, mode='r') as f:
+            full_shape = f[f'setup{self._setup_id}/timepoint{self._timepoint}/s0'].shape
+
+        if self._verbose:
+            print(f'scales = {scales}')
+            print(f'full_shape = {full_shape}')
+
+        # Check for out of bounds (and fix it if not)
+        position, volume = _check_for_out_of_bounds(position, volume, full_shape, verbose=self._verbose)
+
+        # Check if volume and position properly scale to the final scale level (and fix it if not)
+        max_scale = scales[-1]
+        target_vol, target_pos, target_shape = _check_shape_and_position_scaling(
+            max_scale, position, volume,
+            self._path, self._setup_id, self._timepoint,
+            verbose=self._verbose)
+
+        # Scale volume and write to target dataset
+        _scale_and_add_to_dataset(self._path, self._setup_id, self._timepoint,
+                                  target_pos, target_vol, target_shape,
+                                  scales, 'interpolate',
+                                  self._n_threads)
+
+    def __setitem__(self, key, value):
+
+        # We are assuming the index to be relative to scale 0 (full resolution)
+
+        position = [k.start for k in key]
+        shp = [k.stop - k.start for k in key]
+        assert list(value.shape) == shp, f'Shape of array = {value.shape} does not match target shape = {shp}'
+
+        self._add_to_volume(position, value)
+
+
+# TODO Implement this one that includes stitching operations
+class BdvDatasetWithStitching(BdvDataset):
+
+    def __init__(self, path, timepoint, setup_id, n_threads=1, halo=None, verbose=False):
+
+        self._halo = halo
+
+        super().__init__(path, timepoint, setup_id, n_threads=n_threads, verbose=verbose)
+
+    def set_halo(self, halo):
+        """
+        Adjust the halo any time you want
+        """
+        self._halo = halo
+
+    def __setitem__(self, key, value):
+
+        # TODO Do the stitching and stuff here
+
+        # Now call the super with the properly stitched volume
+        super().__setitem__(key, value)
