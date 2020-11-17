@@ -1,6 +1,5 @@
 import os
 from itertools import product
-import numpy as np
 
 # check if we have elf and use it's open_file implementation
 try:
@@ -106,15 +105,6 @@ def relative_to_absolute_scale_factors(scale_factors):
         abs_scale_factors.append(abs_scale_factor)
 
     return abs_scale_factors
-
-
-def get_nblocks(shape, block_shape, add_incomplete_blocks=False):
-    if add_incomplete_blocks:
-        n_blocks = [sh // bs + int((sh % bs) != 0)
-                    for sh, bs in zip(shape, block_shape)]
-    else:
-        n_blocks = [sh // bs for sh, bs in zip(shape, block_shape)]
-    return np.prod(n_blocks)
 
 
 def grow_bounding_box(bb, halo, shape):
