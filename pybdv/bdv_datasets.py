@@ -98,10 +98,13 @@ def _scale_and_add_to_dataset(
     # Perform scaling of volume, by generating a temporary bdv file
     # FIXME it is probably sufficient to keep it in memory, since I assume that the volume is in memory anyways, but the
     # FIXME     make_bdv function is so very convenient right now...
-    scales = np.array(scales)
+    scales = np.array(scales).astype(int)
     scale_factors = scales[1: 2].tolist()
-    tmp_name = os.path.join(data_path, f'tmp_{np.random.randint(0, 2 ** 16, dtype="uint16")}')
-    tmp_bdv = tmp_name + '.n5'
+    tmp_name = f'./tmp_{np.random.randint(0, 2 ** 16, dtype="uint16")}'
+    if is_h5:
+        tmp_bdv = tmp_name + '.h5'
+    else:
+        tmp_bdv = tmp_name + '.n5'
     for scale in scales[2:]:
         scale_factors.append((scale / np.product(scale_factors, axis=0)).astype(int).tolist())
     make_bdv(
@@ -134,7 +137,10 @@ def _scale_and_add_to_dataset(
             ] = scaled_vol
 
     # Delete the temporary bdv file
-    rmtree(tmp_bdv)
+    if is_h5:
+        os.remove(tmp_bdv)
+    else:
+        rmtree(tmp_bdv)
     os.remove(tmp_name + '.xml')
 
 
@@ -159,7 +165,7 @@ class BdvDataset:
         self._is_h5 = os.path.splitext(path)[1] in HDF5_EXTENSIONS
 
         # Get the scales
-        self._scales = get_scale_factors(self._path, self._setup_id)
+        self._scales = np.array(get_scale_factors(self._path, self._setup_id)).astype(int)
 
         # Determine full dataset shape
         with open_file(self._path, mode='r') as f:
