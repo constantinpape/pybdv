@@ -12,6 +12,8 @@ try:
 except ImportError:
     z5py = None
 
+DOWNSCALE_MODE = 'interpolate'
+
 
 class UtilTestMixin(ABC):
     tmp_folder = './tmp'
@@ -33,7 +35,7 @@ class UtilTestMixin(ABC):
         os.makedirs(self.tmp_folder, exist_ok=True)
         # data = np.random.rand(*self.shape)
         data = np.zeros(self.shape)
-        make_bdv(data, self.out_path, downscale_factors=self.scale_factors)
+        make_bdv(data, self.out_path, downscale_factors=self.scale_factors, downscale_mode=DOWNSCALE_MODE)
 
     def check_data(self, pos, shp):
 
@@ -54,13 +56,13 @@ class UtilTestMixin(ABC):
             ref_out_path = os.path.join(self.tmp_folder, 'ref_tmp_data.h5')
         else:
             ref_out_path = os.path.join(self.tmp_folder, 'ref_tmp_data.n5')
-        make_bdv(ref_data, ref_out_path, downscale_factors=self.scale_factors)
+        make_bdv(ref_data, ref_out_path, downscale_factors=self.scale_factors, downscale_mode=DOWNSCALE_MODE)
 
-        for scale in self.scale_factors:
+        for idx, scale in enumerate(self.abs_scale_factors):
             with open_file(self.out_path, mode='r') as f:
-                data = f[get_key(is_h5, timepoint=0, setup_id=0, scale=0)][:]
+                data = f[get_key(is_h5, timepoint=0, setup_id=0, scale=idx)][:]
             with open_file(ref_out_path, mode='r') as f:
-                ref_data = f[get_key(is_h5, timepoint=0, setup_id=0, scale=0)][:]
+                ref_data = f[get_key(is_h5, timepoint=0, setup_id=0, scale=idx)][:]
 
             # Now check for the difference
             self.assertEqual(np.abs(data - ref_data).max(), 0)
@@ -73,7 +75,7 @@ class UtilTestMixin(ABC):
 
         vol = np.ones(shp)
 
-        ds = BdvDataset(self.out_path, timepoint=0, setup_id=0, downscale_mode='interpolate')
+        ds = BdvDataset(self.out_path, timepoint=0, setup_id=0, downscale_mode=DOWNSCALE_MODE)
         ds[
             pos[0]: pos[0] + shp[0],
             pos[1]: pos[1] + shp[1],
@@ -90,7 +92,7 @@ class UtilTestMixin(ABC):
 
         vol = np.ones(shp)
 
-        ds = BdvDataset(self.out_path, timepoint=0, setup_id=0, downscale_mode='interpolate')
+        ds = BdvDataset(self.out_path, timepoint=0, setup_id=0, downscale_mode=DOWNSCALE_MODE)
         ds[
             pos[0]: pos[0] + shp[0],
             pos[1]: pos[1] + shp[1],
@@ -107,7 +109,7 @@ class UtilTestMixin(ABC):
 
         vol = np.ones(shp)
 
-        ds = BdvDataset(self.out_path, timepoint=0, setup_id=0, downscale_mode='interpolate')
+        ds = BdvDataset(self.out_path, timepoint=0, setup_id=0, downscale_mode=DOWNSCALE_MODE)
         ds[
             pos[0]: pos[0] + shp[0],
             pos[1]: pos[1] + shp[1],
@@ -124,7 +126,7 @@ class UtilTestMixin(ABC):
 
         vol = np.ones(shp)
 
-        ds = BdvDataset(self.out_path, timepoint=0, setup_id=0, downscale_mode='interpolate', verbose=True)
+        ds = BdvDataset(self.out_path, timepoint=0, setup_id=0, downscale_mode=DOWNSCALE_MODE, verbose=True)
         ds[
             pos[0]: pos[0] + shp[0],
             pos[1]: pos[1] + shp[1],
@@ -141,7 +143,7 @@ class UtilTestMixin(ABC):
 
         vol = np.ones(shp)
 
-        ds = BdvDataset(self.out_path, timepoint=0, setup_id=0, downscale_mode='interpolate')
+        ds = BdvDataset(self.out_path, timepoint=0, setup_id=0, downscale_mode=DOWNSCALE_MODE)
         ds[
             pos[0]: pos[0] + shp[0],
             pos[1]: pos[1] + shp[1],
@@ -158,7 +160,7 @@ class UtilTestMixin(ABC):
 
         vol = np.ones(shp)
 
-        ds = BdvDataset(self.out_path, timepoint=0, setup_id=0, downscale_mode='interpolate')
+        ds = BdvDataset(self.out_path, timepoint=0, setup_id=0, downscale_mode=DOWNSCALE_MODE)
         ds[
             pos[0]: pos[0] + shp[0],
             pos[1]: pos[1] + shp[1],
