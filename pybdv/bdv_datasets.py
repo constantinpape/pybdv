@@ -1,10 +1,8 @@
 
 import os
 import numpy as np
-import json
 from .util import open_file, get_scale_factors, get_key, HDF5_EXTENSIONS
-from .converter import make_bdv
-from shutil import rmtree
+from .downsample import downsample_in_memory
 
 
 def _check_for_out_of_bounds(position, volume, full_shape, verbose=False):
@@ -95,38 +93,32 @@ def _scale_and_add_to_dataset(
 
     is_h5 = os.path.splitext(data_path)[1] in HDF5_EXTENSIONS
 
-    # Perform scaling of volume, by generating a temporary bdv file
-    # FIXME it is probably sufficient to keep it in memory, since I assume that the volume is in memory anyways, but the
-    # FIXME     make_bdv function is so very convenient right now...
     scales = np.array(scales).astype(int)
     scale_factors = scales[1: 2].tolist()
-    tmp_name = f'./tmp_{np.random.randint(0, 2 ** 16, dtype="uint16")}'
-    if is_h5:
-        tmp_bdv = tmp_name + '.h5'
-    else:
-        tmp_bdv = tmp_name + '.n5'
+
     for scale in scales[2:]:
         scale_factors.append((scale / np.product(scale_factors, axis=0)).astype(int).tolist())
-    make_bdv(
-        data=target_vol,
-        output_path=tmp_bdv,
-        downscale_factors=scale_factors,
-        downscale_mode=downscale_mode,
-        n_threads=n_threads
+
+    # Scale the data
+    downscaled_vols = [target_vol]
+    downscaled_vols.extend(
+        downsample_in_memory(
+            target_vol,
+            downscale_factors=scale_factors,
+            downscale_mode=downscale_mode,
+            block_shape=(64, 64, 64),
+            n_threads=n_threads
+        )
     )
 
-    # Now, we just need to fetch the scaled data and put it to the proper positions
+    # Now, we just need to put it to the proper positions in the bdv file
     for scale_id, scale in enumerate(scales):
 
         # Position in the current scale
         pos_in_scale = (target_pos / scale).astype(int)
         shp_in_scale = (target_shape / scale).astype(int)
 
-        # Write the data to each scale
-        with open_file(tmp_bdv, mode='r') as f:
-            key = get_key(is_h5, timepoint=0, setup_id=0, scale=scale_id)
-            scaled_vol = f[key][:]
-            # assert list(scaled_vol.shape) == shp_in_scale.tolist()
+        scaled_vol = downscaled_vols[scale_id]
 
         with open_file(data_path, mode='a') as f:
             key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=scale_id)
@@ -135,13 +127,6 @@ def _scale_and_add_to_dataset(
                 pos_in_scale[1]: pos_in_scale[1] + shp_in_scale[1],
                 pos_in_scale[2]: pos_in_scale[2] + shp_in_scale[2]
             ] = scaled_vol
-
-    # Delete the temporary bdv file
-    if is_h5:
-        os.remove(tmp_bdv)
-    else:
-        rmtree(tmp_bdv)
-    os.remove(tmp_name + '.xml')
 
 
 class BdvDataset:
