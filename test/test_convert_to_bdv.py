@@ -1,7 +1,7 @@
 import os
 import unittest
 from abc import ABC
-from subprocess import call
+from subprocess import run
 from shutil import rmtree
 
 import numpy as np
@@ -50,7 +50,7 @@ class ConvertToBdvTestMixin(ABC):
         self.check_result()
 
     def test_cli_simple(self):
-        call(['convert_to_bdv', self.in_path, 'data', self.out_path])
+        run(['convert_to_bdv', self.in_path, 'data', self.out_path])
         self.check_result()
 
     def _test_overwrite(self, mode):

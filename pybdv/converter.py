@@ -4,7 +4,7 @@ from warnings import warn
 from concurrent import futures
 from tqdm import tqdm
 
-from .util import (blocking, get_nblocks, open_file, get_key,
+from .util import (blocking, open_file, get_key,
                    HDF5_EXTENSIONS, N5_EXTENSIONS, XML_EXTENSIONS)
 from .metadata import (get_setup_ids, get_timeponts,
                        validate_affine, validate_attributes,
@@ -132,15 +132,15 @@ def copy_dataset(input_path, input_key, output_path, output_key, is_h5,
                 data = convert_to_bdv_dtype(data)
             ds_out[bb] = data
 
-        n_blocks = get_nblocks(shape, ds_chunks)
         print("Copy initial dataset from: %s:%s to %s:%s" % (input_path, input_key,
                                                              output_path, output_key))
 
+        blocks = list(blocking(shape, ds_chunks))
         if n_threads > 1:
             with futures.ThreadPoolExecutor(n_threads) as tp:
-                list(tqdm(tp.map(copy_chunk, blocking(shape, ds_chunks)), total=n_blocks))
+                list(tqdm(tp.map(copy_chunk, blocks), total=len(blocks)))
         else:
-            for bb in tqdm(blocking(shape, ds_chunks), total=n_blocks):
+            for bb in tqdm(blocks, total=len(blocks)):
                 copy_chunk(bb)
 
     return False
