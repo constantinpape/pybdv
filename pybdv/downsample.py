@@ -153,7 +153,7 @@ def downsample(path, in_key, out_key, factor, mode, n_threads=1, overwrite=False
             outp = downsample_function(inp, factor, out_shape)
             ds_out[bb] = outp[bb_local]
 
-        blocks = list(blocking(shape, chunks))
+        blocks = list(blocking(sampled_shape, chunks))
         if n_threads > 1:
             with futures.ThreadPoolExecutor(n_threads) as tp:
                 list(tqdm(tp.map(sample_chunk, blocks), total=len(blocks)))
