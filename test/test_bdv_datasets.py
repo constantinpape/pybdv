@@ -6,16 +6,17 @@ from shutil import rmtree
 import numpy as np
 from pybdv import make_bdv, BdvDataset
 from pybdv.util import open_file, get_key, HDF5_EXTENSIONS
+from matplotlib import pyplot as plt
 
 try:
     import z5py
 except ImportError:
     z5py = None
 
-DOWNSCALE_MODE = 'interpolate'
+DOWNSCALE_MODE = 'mean'
 
 
-class UtilTestMixin(ABC):
+class BdvDatasetTestMixin(ABC):
     tmp_folder = './tmp'
     xml_path = './tmp/test.xml'
     shape = (128,) * 3
@@ -170,12 +171,12 @@ class UtilTestMixin(ABC):
         self.check_data(pos, shp)
 
 
-class TestUtilH5(UtilTestMixin, unittest.TestCase):
+class TestBdvDatasetH5(BdvDatasetTestMixin, unittest.TestCase):
     out_path = './tmp/test.h5'
 
 
 @unittest.skipUnless(z5py is not None, "Need z5py for n5 support")
-class TestConvertToBdvN5(UtilTestMixin, unittest.TestCase):
+class TestBdvDatasetN5(BdvDatasetTestMixin, unittest.TestCase):
     out_path = './tmp/test.n5'
 
 

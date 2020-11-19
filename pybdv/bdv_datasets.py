@@ -152,7 +152,7 @@ class BdvDataset:
     The full resolution area is padded, if necessary, to avoid sub-pixel locations in the down-sampling layers
     """
 
-    def __init__(self, path, timepoint, setup_id, downscale_mode='interpolate', n_threads=1, verbose=False):
+    def __init__(self, path, timepoint, setup_id, downscale_mode='mean', n_threads=1, verbose=False):
 
         self._path = path
         self._timepoint = timepoint
@@ -212,7 +212,7 @@ class BdvDatasetWithStitching(BdvDataset):
 
         self._halo = halo
 
-        super().__init__(path, timepoint, setup_id, downscale_mode='interpolate', n_threads=n_threads, verbose=verbose)
+        super().__init__(path, timepoint, setup_id, downscale_mode=downscale_mode, n_threads=n_threads, verbose=verbose)
 
     def set_halo(self, halo):
         """
