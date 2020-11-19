@@ -6,6 +6,8 @@ import numpy as np
 
 from pybdv.downsample import get_downsampler, sample_shape
 
+DOWNSCALING_MODES = ['nearest', 'mean', 'max', 'min', 'interpolate']
+
 
 class TestDownsample(unittest.TestCase):
     test_path = 'tmp.h5'
@@ -14,25 +16,23 @@ class TestDownsample(unittest.TestCase):
         if os.path.exists(self.test_path):
             os.remove(self.test_path)
 
-    def test_downsample(self):
+    def _test_downsample(self, shape, block_shape, scale_factor,
+                         modes=DOWNSCALING_MODES):
         from pybdv.downsample import downsample
 
-        shape = (256, 256, 256)
-        block_shape = (32, 32, 32)
-        scale_factor = [2, 2, 2]
         input_vol = np.random.rand(*shape)
 
         in_key = 'data_in'
-
         with h5py.File(self.test_path, 'a') as f:
+            if in_key in f:
+                del f[in_key]
             f.create_dataset(in_key, data=input_vol, chunks=block_shape)
 
-        modes = ['nearest', 'mean', 'max', 'min', 'interpolate']
         for mode in modes:
 
             out_key = f'ds_{mode}'
             downsample(self.test_path, in_key, out_key,
-                       scale_factor, mode, n_threads=4)
+                       scale_factor, mode, n_threads=1)
             with h5py.File(self.test_path, 'r') as f:
                 vol = f[out_key][:]
 
@@ -45,6 +45,30 @@ class TestDownsample(unittest.TestCase):
             else:
                 self.assertTrue(np.allclose(vol, exp_vol))
 
+    def test_downsample(self):
+        # test with regular shape and chunks for all modes
+        self._test_downsample(shape=(256, 256, 256),
+                              block_shape=(32, 32, 32),
+                              scale_factor=(2, 2, 2))
+
+    # test for multiple shape / block shape combinations
+    def test_downsample_shapes(self):
+        shapes = [
+            (128, 128, 144),
+            (123, 71, 97)
+        ]
+        block_shapes = [
+            (64, 64, 64),
+            (33, 7, 93)
+        ]
+        for shape in shapes:
+            for block_shape in block_shapes:
+                self._test_downsample(shape=shape,
+                                      block_shape=block_shape,
+                                      scale_factor=(2, 2, 2),
+                                      modes=['nearest'])
+                os.remove(self.test_path)
+
     def test_downsample_in_memory(self):
         from pybdv.downsample import downsample_in_memory
 
@@ -54,8 +78,7 @@ class TestDownsample(unittest.TestCase):
 
         scale_factors = 4 * [[2, 2, 2]]
 
-        modes = ['nearest', 'mean', 'max', 'min', 'interpolate']
-        for mode in modes:
+        for mode in DOWNSCALING_MODES:
             exp_vol = input_vol.copy()
             ds_vols = downsample_in_memory(input_vol,
                                            scale_factors,
