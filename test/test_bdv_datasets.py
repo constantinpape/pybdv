@@ -6,7 +6,6 @@ from shutil import rmtree
 import numpy as np
 from pybdv import make_bdv, BdvDataset
 from pybdv.util import open_file, get_key, HDF5_EXTENSIONS
-from matplotlib import pyplot as plt
 
 try:
     import z5py
