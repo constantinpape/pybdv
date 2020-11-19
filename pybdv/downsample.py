@@ -5,7 +5,7 @@ from skimage.transform import resize
 from skimage.measure import block_reduce
 from tqdm import tqdm
 
-from .util import blocking, grow_bounding_box, get_nblocks, open_file
+from .util import blocking, grow_bounding_box, open_file
 
 
 def ds_interpolate(data, scale_factor, out_shape, order):
@@ -34,10 +34,7 @@ def sample_shape(shape, factor, add_incomplete_blocks=False):
     return sampled
 
 
-def downsample(path, in_key, out_key, factor, mode, n_threads=1, overwrite=False):
-    """ Downsample input hdf5 volume
-    """
-
+def get_downsampler(mode):
     if mode == 'nearest':
         downsample_function = partial(ds_interpolate, order=0)
     elif mode == 'mean':
@@ -50,7 +47,76 @@ def downsample(path, in_key, out_key, factor, mode, n_threads=1, overwrite=False
         downsample_function = partial(ds_interpolate, order=3)
     else:
         raise ValueError("Downsampling mode %s is not supported" % mode)
-    halo = factor
+    return downsample_function
+
+
+def downsample_in_memory(input_volume,
+                         downscale_factors,
+                         downscale_mode,
+                         block_shape,
+                         n_threads):
+    downscaled_volumes = []
+    downsample_function = get_downsampler(downscale_mode)
+
+    def sample_chunk(bb, in_vol, out_vol, scale_factor, halo):
+
+        # grow the bounding box if we have a halo
+        if halo is None:
+            bb_grown = bb
+            bb_local = np.s_[:]
+        else:
+            bb_grown, bb_local = grow_bounding_box(bb, halo, shape)
+
+        bb_up = tuple(slice(b.start * scale_factor, b.stop * scale_factor)
+                      for b, scale_factor in zip(bb_grown, factor))
+        inp = in_vol[bb_up]
+
+        # don't sample empty blocks
+        if inp.sum() == 0:
+            return
+
+        out_shape = tuple(b.stop - b.start for b in bb_grown)
+        outp = downsample_function(inp, factor, out_shape)
+        out_vol[bb] = outp[bb_local]
+
+    in_vol = input_volume
+    for factor in downscale_factors:
+        shape = in_vol.shape
+
+        halo = None
+        # TODO for the interpolate mode we should use a halo,
+        # otherwise the result is not fully correct at the block boundaries
+        # however, the current implementation with halo is not correct
+        # halo = 2 * factor if mode == 'interpolate' else None
+
+        ds_shape = sample_shape(shape, factor)
+        ds_vol = np.zeros(ds_shape, dtype=input_volume.dtype)
+
+        sampler = partial(sample_chunk,
+                          in_vol=in_vol,
+                          out_vol=ds_vol,
+                          scale_factor=factor,
+                          halo=halo)
+
+        with futures.ThreadPoolExecutor(n_threads) as tp:
+            list(tp.map(sampler, blocking(ds_shape, block_shape)))
+
+        downscaled_volumes.append(ds_vol)
+        in_vol = ds_vol
+
+    return downscaled_volumes
+
+
+def downsample(path, in_key, out_key, factor, mode, n_threads=1, overwrite=False):
+    """ Downsample input volume.
+    """
+
+    downsample_function = get_downsampler(mode)
+    halo = None
+    # TODO for the interpolate mode we should use a halo,
+    # otherwise the result is not fully correct at the block boundaries
+    # however, the current implementation with halo is not correct
+    # halo = 2 * factor if mode == 'interpolate' else None
 
     with open_file(path, 'a') as f:
         ds_in = f[in_key]
@@ -69,11 +135,11 @@ def downsample(path, in_key, out_key, factor, mode, n_threads=1, overwrite=False
         def sample_chunk(bb):
 
             # grow the bounding box if we have a halo
-            if halo is not None:
-                bb_grown, bb_local = grow_bounding_box(bb, halo, shape)
-            else:
+            if halo is None:
                 bb_grown = bb
                 bb_local = np.s_[:]
+            else:
+                bb_grown, bb_local = grow_bounding_box(bb, halo, shape)
 
             bb_up = tuple(slice(b.start * scale_factor, b.stop * scale_factor)
                           for b, scale_factor in zip(bb_grown, factor))
@@ -87,10 +153,10 @@ def downsample(path, in_key, out_key, factor, mode, n_threads=1, overwrite=False
             outp = downsample_function(inp, factor, out_shape)
             ds_out[bb] = outp[bb_local]
 
-        n_blocks = get_nblocks(sampled_shape, chunks)
+        blocks = list(blocking(shape, chunks))
         if n_threads > 1:
             with futures.ThreadPoolExecutor(n_threads) as tp:
-                list(tqdm(tp.map(sample_chunk, blocking(shape, chunks)), total=n_blocks))
+                list(tqdm(tp.map(sample_chunk, blocks), total=len(blocks)))
         else:
-            for bb in tqdm(blocking(sampled_shape, chunks), total=n_blocks):
+            for bb in tqdm(blocks, total=len(blocks)):
                 sample_chunk(bb)

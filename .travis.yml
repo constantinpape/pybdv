@@ -25,7 +25,7 @@ install:
   - conda build -c conda-forge -c defaults conda-recipe
 
 before_script:
-  - conda create -n test-env -c conda-forge -c defaults -c cpape --use-local pybdv
+  - conda create -n test-env -c conda-forge -c defaults --use-local pybdv
 
 script:
   - conda activate test-env
