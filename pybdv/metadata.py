@@ -63,7 +63,7 @@ def _require_view_setup(viewsets, setup_id, setup_name,
             if overwrite_data:
                 vs.find('size').text = '{} {} {}'.format(nx, ny, nz)
             else:
-                raise ValueError("Incompatible dataset size")
+                raise ValueError(f"Incompatible dataset size: {shape_exp}, {(nx, ny, nz)}")
 
         # check the voxel size
         vox = vs.find('voxelSize')
@@ -589,7 +589,7 @@ def validate_affine(affine):
         for aff in affine.values():
             _check_affine(aff)
     else:
-        raise ValueError("Invalid type for affine transformatin, expect list or dict, got %s" % type(affine))
+        raise ValueError("Invalid type for affine transformation, expect list or dict, got %s" % type(affine))
 
 
 def _write_transformation(vregs, setup_id, timepoint, affine, resolution, overwrite):
@@ -784,6 +784,19 @@ def get_resolution(xml_path, setup_id):
     raise ValueError("Could not find setup %i" % setup_id)
 
 
+def get_size(xml_path, setup_id):
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    seqdesc = root.find('SequenceDescription')
+    viewsets = seqdesc.find('ViewSetups')
+    vsetups = viewsets.findall('ViewSetup')
+    for vs in vsetups:
+        if vs.find('id').text == str(setup_id):
+            size = vs.find('size').text
+            return tuple(int(siz) for siz in size.split())[::-1]
+    raise ValueError("Could not find setup %i" % setup_id)
+
+
 def get_data_path(xml_path, return_absolute_path=False):
     """ Get path to the data.
 
@@ -805,3 +818,45 @@ def get_data_path(xml_path, return_absolute_path=False):
         path = os.path.join(os.path.split(xml_path)[0], path)
         path = os.path.abspath(os.path.relpath(path))
     return path
+
+
+#
+# helper functions to write additional xml metadata
+#
+
+
+def write_size_and_resolution(xml_path, setup_id, size, resolution):
+    """ Write size and resolution data.
+    """
+
+    if size is not None and len(size) != 3:
+        raise ValueError(f"Expected size of length 3 instead of {len(size)}")
+    if resolution is not None and len(resolution) != 3:
+        raise ValueError(f"Expected resolution of length 3 instead of {len(resolution)}")
+
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    seqdesc = root.find('SequenceDescription')
+    viewsets = seqdesc.find('ViewSetups')
+    vsetups = viewsets.findall('ViewSetup')
+
+    found_setup = False
+    for vs in vsetups:
+        if vs.find('id').text == str(setup_id):
+            size_elem = vs.find('size')
+            if size is not None:
+                size_elem.text = ' '.join(map(str, size[::-1]))
+
+            res_elem = vs.find('voxelSize').find('size')
+            if resolution is not None:
+                res_elem.text = ' '.join(map(str, resolution[::-1]))
+
+            found_setup = True
+
+    if found_setup:
+        # write the xml
+        indent_xml(root)
+        tree = ET.ElementTree(root)
+        tree.write(xml_path)
+    else:
+        raise ValueError("Could not find setup %i" % setup_id)

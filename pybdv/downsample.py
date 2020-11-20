@@ -129,8 +129,8 @@ def downsample(path, in_key, out_key, factor, mode, n_threads=1, overwrite=False
         if overwrite and out_key in f:
             del f[out_key]
 
-        ds_out = f.create_dataset(out_key, shape=sampled_shape, chunks=chunks,
-                                  compression='gzip', dtype=ds_in.dtype)
+        ds_out = f.require_dataset(out_key, shape=sampled_shape, chunks=chunks,
+                                   compression='gzip', dtype=ds_in.dtype)
 
         def sample_chunk(bb):
 
