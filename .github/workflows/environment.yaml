@@ -1,0 +1,9 @@
+name: pybdv-build-env
+channels:
+  - conda-forge
+dependencies:
+  - imageio
+  - h5py
+  - scikit-image
+  - tqdm
+  - zarr
