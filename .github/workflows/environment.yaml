@@ -6,4 +6,6 @@ dependencies:
   - h5py
   - scikit-image
   - tqdm
-  - zarr
+  - z5py
+  # zarr doesn't work yet, because it doesn't allow writing 'dataType' as group attribute
+  # - zarr

@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/constantinpape/pybdv.svg?branch=master)](https://travis-ci.org/constantinpape/pybdv)
+[![Build Status](https://github.com/constantinpape/pybdv/workflows/build/badge.svg)](https://github.com/constantinpape/pybdv/actions)
 
 # pyBDV
 
