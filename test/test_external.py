@@ -5,12 +5,12 @@ from shutil import rmtree
 import imageio
 import h5py
 import numpy as np
-import skimage.data
 
 
 # dummy test data, needs to be converted to bdv/xml
 # with FIJI externally
 def make_test_data():
+    import skimage.data
     d = skimage.data.astronaut()
     d = d.transpose((2, 0, 1))
     d = np.concatenate(2 * [d], axis=0)
@@ -22,6 +22,14 @@ def make_test_data():
 
 class TestExternal(unittest.TestCase):
     tmp_folder = 'tmp'
+    inp_path = os.path.join(
+        os.path.split(__file__)[0],
+        '../data/example.tif'
+    )
+    exp_path = os.path.join(
+        os.path.split(__file__)[0],
+        '../data/example.h5'
+    )
 
     def setUp(self):
         os.makedirs(self.tmp_folder, exist_ok=True)
@@ -34,12 +42,11 @@ class TestExternal(unittest.TestCase):
 
     def test_external(self):
         from pybdv import make_bdv
-        d = imageio.volread('../data/example.tif')
+        d = imageio.volread(self.inp_path)
         res_path = os.path.join(self.tmp_folder, 'data.h5')
-        exp_path = '../data/example.h5'
         make_bdv(d, res_path, convert_dtype=True)
 
-        with h5py.File(exp_path, 'r') as f:
+        with h5py.File(self.exp_path, 'r') as f:
             ds = f['t00000/s00/0/cells']
             exp = ds[:]
         with h5py.File(res_path, 'r') as f:

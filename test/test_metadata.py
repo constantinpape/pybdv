@@ -5,13 +5,7 @@ from shutil import rmtree
 
 import numpy as np
 from pybdv import make_bdv
-from pybdv.util import open_file
-
-try:
-    import z5py
-except ImportError:
-    z5py = None
-
+from pybdv.util import n5_file
 
 
 class MetadataTestMixin(ABC):
@@ -69,12 +63,12 @@ class MetadataTestMixin(ABC):
 
         attrs2 = {'channel': {'id': None, 'name': 'foo'}}
         attrs2_exp = {'channel': {'id': 0, 'name': 'foo'}}
-        attrs2_ = validate_attributes(self.xml_path, attrs1, 0, True)
+        attrs2_ = validate_attributes(self.xml_path, attrs2, 0, True)
         self.assertEqual(attrs2_exp, attrs2_)
 
         attrs3 = {'channel': {'name': 'bar'}}
         with self.assertRaises(ValueError):
-            validate_attributes(self.xml_path, attrs1, 1, True)
+            validate_attributes(self.xml_path, attrs3, 1, True)
 
         attrs4 = {'displaysettings': {'id': 0, 'name': 'baz', 'min': 0, 'max': 1, 'isset': True,
                                       'color': [255, 255, 255, 255]}}
@@ -96,7 +90,7 @@ class TestMetadataH5(MetadataTestMixin, unittest.TestCase):
     bdv_format = 'bdv.hdf5'
 
 
-@unittest.skipUnless(z5py is not None, "Need z5py for n5 support")
+@unittest.skipIf(n5_file is None, "Need zarr or z5py for n5 support")
 class TestMetadataN5(MetadataTestMixin, unittest.TestCase):
     out_path = './tmp/test.n5'
     out_path2 = './tmp/test2.n5'

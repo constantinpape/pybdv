@@ -5,12 +5,7 @@ from subprocess import run
 from shutil import rmtree
 
 import numpy as np
-from pybdv.util import get_key, open_file
-
-try:
-    import z5py
-except ImportError:
-    z5py = None
+from pybdv.util import get_key, open_file, n5_file
 
 
 class ConvertToBdvTestMixin(ABC):
@@ -124,7 +119,7 @@ class TestConvertToBdvH5(ConvertToBdvTestMixin, unittest.TestCase):
     is_h5 = True
 
 
-@unittest.skipUnless(z5py is not None, "Need z5py for n5 support")
+@unittest.skipIf(n5_file is None, "Need zarr or z5py for n5 support")
 class TestConvertToBdvN5(ConvertToBdvTestMixin, unittest.TestCase):
     in_path = './tmp/in.n5'
     out_path = './tmp/test.n5'

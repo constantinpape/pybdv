@@ -5,12 +5,8 @@ from shutil import rmtree
 
 import numpy as np
 from pybdv import make_bdv, BdvDataset
-from pybdv.util import open_file, get_key, HDF5_EXTENSIONS
+from pybdv.util import open_file, get_key, HDF5_EXTENSIONS, n5_file
 
-try:
-    import z5py
-except ImportError:
-    z5py = None
 
 DOWNSCALE_MODE = 'mean'
 
@@ -174,7 +170,7 @@ class TestBdvDatasetH5(BdvDatasetTestMixin, unittest.TestCase):
     out_path = './tmp/test.h5'
 
 
-@unittest.skipUnless(z5py is not None, "Need z5py for n5 support")
+@unittest.skipIf(n5_file is None, "Need zarr or z5py for n5 support")
 class TestBdvDatasetN5(BdvDatasetTestMixin, unittest.TestCase):
     out_path = './tmp/test.n5'
 
