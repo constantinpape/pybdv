@@ -1,4 +1,5 @@
 [![Build Status](https://github.com/constantinpape/pybdv/workflows/build/badge.svg)](https://github.com/constantinpape/pybdv/actions)
+[![Conda Forge](https://img.shields.io/conda/vn/conda-forge/pybdv.svg)](https://anaconda.org/conda-forge/pybdv)
 
 # pyBDV
 
@@ -13,7 +14,7 @@ python setup.py install
 ```
 or via conda:
 ```
-conda install -c conda-forge -c cpape pybdv
+conda install -c conda-forge pybdv
 ```
 
 
