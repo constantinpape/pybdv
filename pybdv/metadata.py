@@ -326,6 +326,15 @@ def write_h5_metadata(path, scale_factors, setup_id=0, timepoint=0, overwrite=Fa
 # n5 metadata format is specified here:
 # https://github.com/bigdataviewer/bigdataviewer-core/blob/master/BDV%20N5%20format.md
 def write_n5_metadata(path, scale_factors, resolution, setup_id=0, timepoint=0, overwrite=False):
+
+    def _write_mdata(g, key, data):
+        if key in g.attrs and overwrite:
+            g.attrs[key] = data
+        elif key in g.attrs and not overwrite:
+            return
+        else:
+            g.attrs[key] = data
+
     # build the effective scale factors
     effective_scales = [scale_factors[0]]
     for factor in scale_factors[1:]:
@@ -340,25 +349,19 @@ def write_n5_metadata(path, scale_factors, resolution, setup_id=0, timepoint=0, 
         root = f[root_key]
         attrs = root.attrs
 
-        # write setup metadata / check for consistency if it already exists
-        if 'downsamplingFactors' in attrs and not overwrite:
-            return
-        root.attrs['downsamplingFactors'] = effective_scales
-
-        if 'dataType' in attrs and not overwrite:
-            return
-        root.attrs['dataType'] = dtype
+        _write_mdata(root, 'downsamplingFactors', effective_scales)
+        _write_mdata(root, 'dataType', dtype)
 
         group_key = get_key(False, timepoint=timepoint, setup_id=setup_id)
         g = f[group_key]
-        g.attrs['multiScale'] = True
-        g.attrs['resolution'] = resolution[::-1]
+        _write_mdata(g, 'multiScale', True)
+        _write_mdata(g, 'resolution', resolution[::-1])
 
         effective_scale = [1, 1, 1]
         for scale_id, factor in enumerate(effective_scales):
             ds = g['s%i' % scale_id]
             effective_scale = [eff * sf for eff, sf in zip(effective_scale, factor)]
-            ds.attrs['downsamplingFactors'] = factor
+            _write_mdata(ds, 'downsamplingFactors', factor)
 
 
 #
