@@ -820,6 +820,15 @@ def get_data_path(xml_path, return_absolute_path=False):
     return path
 
 
+def get_name(xml_path, setup_id):
+    et = ET.parse(xml_path).getroot()
+    setups = et.find("SequenceDescription").find("ViewSetups").findall("ViewSetup")
+    for vs in setups:
+        if vs.find('id').text == str(setup_id):
+            return vs.find('name').text
+    raise ValueError("Could not find setup %i" % setup_id)
+
+
 #
 # helper functions to write additional xml metadata
 #
