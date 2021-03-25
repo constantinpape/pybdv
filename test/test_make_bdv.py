@@ -282,7 +282,7 @@ class MakeBdvTestMixin(ABC):
 
         shape2 = (72,) * 3
         data2 = np.random.rand(*shape2)
-        sf2 = [[1, 2, 2], [2, 2, 2]]
+        sf2 = [[1, 2, 2], [2, 2, 2]] if mode != 'metadata' else sf1
         attrs2 = {'channel': {'id': 3}, 'angle': {'id': 6}}
         affine2 = np.random.rand(12).tolist()
 

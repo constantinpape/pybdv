@@ -77,7 +77,7 @@ class ConvertToBdvTestMixin(ABC):
         affine1 = np.random.rand(12).tolist()
 
         self._make_input('data2', np.random.rand(72, 72, 72), (32, 32, 32))
-        sf2 = [[1, 2, 2], [2, 2, 2]]
+        sf2 = [[1, 2, 2], [2, 2, 2]] if mode != 'metadata' else sf1
         attrs2 = {'channel': {'id': 3}, 'angle': {'id': 6}}
         affine2 = np.random.rand(12).tolist()
 
