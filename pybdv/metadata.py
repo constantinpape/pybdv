@@ -347,7 +347,6 @@ def write_n5_metadata(path, scale_factors, resolution, setup_id=0, timepoint=0, 
 
         root_key = get_key(False, setup_id=setup_id)
         root = f[root_key]
-        attrs = root.attrs
 
         _write_mdata(root, 'downsamplingFactors', effective_scales)
         _write_mdata(root, 'dataType', dtype)
@@ -829,6 +828,20 @@ def get_name(xml_path, setup_id):
     for vs in setups:
         if vs.find('id').text == str(setup_id):
             return vs.find('name').text
+    raise ValueError("Could not find setup %i" % setup_id)
+
+
+def write_name(xml_path, setup_id, name):
+    root = ET.parse(xml_path).getroot()
+    setups = root.find("SequenceDescription").find("ViewSetups").findall("ViewSetup")
+    for vs in setups:
+        if vs.find('id').text == str(setup_id):
+            node = vs.find('name')
+            node.text = name
+            indent_xml(root)
+            tree = ET.ElementTree(root)
+            tree.write(xml_path)
+            return
     raise ValueError("Could not find setup %i" % setup_id)
 
 

@@ -83,6 +83,18 @@ class MetadataTestMixin(ABC):
         with self.assertRaises(ValueError):
             validate_attributes(self.xml_path2, attrs5, 1, True)
 
+    def test_get_name(self):
+        from pybdv.metadata import get_name
+        name = get_name(self.xml_path, setup_id=0)
+        self.assertEqual(name, "Setup0")
+
+    def test_write_name(self):
+        from pybdv.metadata import get_name, write_name
+        name = "MyName"
+        write_name(self.xml_path, setup_id=0, name=name)
+        got = get_name(self.xml_path, setup_id=0)
+        self.assertEqual(name, got)
+
 
 class TestMetadataH5(MetadataTestMixin, unittest.TestCase):
     out_path = './tmp/test.h5'
