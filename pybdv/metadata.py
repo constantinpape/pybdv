@@ -196,13 +196,22 @@ def write_xml_metadata(xml_path, data_path, unit, resolution, is_h5,
         overwrite_data (bool): whether to over-write purely data-related attributes
         enforce_consistency (bool): whether we enforce consistency of the setup attributes
     """
-    # number of timepoints hard-coded to 1
-    setup_name = 'Setup%i' % setup_id if setup_name is None else setup_name
     key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=0)
     with open_file(data_path, 'r') as f:
         shape = f[key].shape
-
     format_type = 'hdf5' if is_h5 else 'n5'
+
+    _write_xml_metadata(xml_path, data_path, unit, resolution,
+                        format_type, shape,
+                        setup_id, timepoint, setup_name, affine, attributes,
+                        overwrite, overwrite_data, enforce_consistency)
+
+
+def _write_xml_metadata(xml_path, data_path, unit, resolution,
+                        format_type, shape,
+                        setup_id, timepoint, setup_name, affine, attributes,
+                        overwrite, overwrite_data, enforce_consistency):
+    setup_name = 'Setup%i' % setup_id if setup_name is None else setup_name
 
     # check if we have xml with metadata already
     # -> yes we do
