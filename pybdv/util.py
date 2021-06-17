@@ -1,5 +1,6 @@
 import os
 from itertools import product
+import numpy as np
 
 # check if we have elf and use it's open_file implementation
 try:
@@ -118,6 +119,8 @@ def relative_to_absolute_scale_factors(scale_factors):
 
 
 def grow_bounding_box(bb, halo, shape):
+    if halo is None:
+        return bb, np.s_[:]
     if not (len(bb) == len(halo) == len(shape)):
         raise ValueError("Invalid number of dimensions.")
     bb_grown = tuple(slice(max(b.start - ha, 0), min(b.stop + ha, sh))

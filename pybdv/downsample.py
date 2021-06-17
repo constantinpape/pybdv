@@ -4,6 +4,7 @@ import numpy as np
 from skimage.transform import resize
 from skimage.measure import block_reduce
 from tqdm import tqdm
+from warnings import warn
 
 from .util import blocking, grow_bounding_box, open_file
 
@@ -45,28 +46,44 @@ def get_downsampler(mode):
         downsample_function = partial(ds_block_reduce, function=np.min)
     elif mode == 'interpolate':
         downsample_function = partial(ds_interpolate, order=3)
+        warn("Downscaling with mode 'interpolate' may lead to different results depending on the chunk size")
     else:
         raise ValueError("Downsampling mode %s is not supported" % mode)
     return downsample_function
+
+
+def _get_halo(halo, factor, ndim, mode):
+
+    # case 1: halo is zero -> we don't use any halo (downstream function expects None for this case)
+    if halo == 0:
+        return None
+    # case 2: halo is None and the mode is interpolate -> set a halo
+    elif halo is None and mode == "interpolate":
+        halo = 2 * factor if isinstance(factor, int) else [2 * fac for fac in factor]
+    # case 3: halo is None and interpolation mode is not interpolsate
+    # -> don't need a halo
+    elif halo is None:
+        return None
+
+    # make halo nd if it's just a number
+    if isinstance(halo, int):
+        halo = [halo] * ndim
+    assert isinstance(halo, (list, tuple))
+    return halo
 
 
 def downsample_in_memory(input_volume,
                          downscale_factors,
                          downscale_mode,
                          block_shape,
-                         n_threads):
+                         n_threads,
+                         halo=0):
     downscaled_volumes = []
     downsample_function = get_downsampler(downscale_mode)
 
     def sample_chunk(bb, in_vol, out_vol, scale_factor, halo):
 
-        # grow the bounding box if we have a halo
-        if halo is None:
-            bb_grown = bb
-            bb_local = np.s_[:]
-        else:
-            bb_grown, bb_local = grow_bounding_box(bb, halo, shape)
-
+        bb_grown, bb_local = grow_bounding_box(bb, halo, shape)
         bb_up = tuple(slice(b.start * scale_factor, b.stop * scale_factor)
                       for b, scale_factor in zip(bb_grown, factor))
         inp = in_vol[bb_up]
@@ -83,11 +100,7 @@ def downsample_in_memory(input_volume,
     for factor in downscale_factors:
         shape = in_vol.shape
 
-        halo = None
-        # TODO for the interpolate mode we should use a halo,
-        # otherwise the result is not fully correct at the block boundaries
-        # however, the current implementation with halo is not correct
-        # halo = 2 * factor if mode == 'interpolate' else None
+        halo = _get_halo(halo, factor, in_vol.ndim, downscale_mode)
 
         ds_shape = sample_shape(shape, factor)
         ds_vol = np.zeros(ds_shape, dtype=input_volume.dtype)
@@ -107,21 +120,18 @@ def downsample_in_memory(input_volume,
     return downscaled_volumes
 
 
-def downsample(path, in_key, out_key, factor, mode, n_threads=1, overwrite=False):
+def downsample(path, in_key, out_key, factor, mode, n_threads=1, overwrite=False, halo=None):
     """ Downsample input volume.
     """
 
     downsample_function = get_downsampler(mode)
-    halo = None
-    # TODO for the interpolate mode we should use a halo,
-    # otherwise the result is not fully correct at the block boundaries
-    # however, the current implementation with halo is not correct
-    # halo = 2 * factor if mode == 'interpolate' else None
 
     with open_file(path, 'a') as f:
         ds_in = f[in_key]
         shape = ds_in.shape
         chunks = ds_in.chunks
+
+        halo = _get_halo(halo, factor, ds_in.ndim, mode)
 
         sampled_shape = sample_shape(shape, factor)
         chunks = tuple(min(sh, ch) for sh, ch in zip(sampled_shape, ds_in.chunks))
@@ -135,11 +145,7 @@ def downsample(path, in_key, out_key, factor, mode, n_threads=1, overwrite=False
         def sample_chunk(bb):
 
             # grow the bounding box if we have a halo
-            if halo is None:
-                bb_grown = bb
-                bb_local = np.s_[:]
-            else:
-                bb_grown, bb_local = grow_bounding_box(bb, halo, shape)
+            bb_grown, bb_local = grow_bounding_box(bb, halo, shape)
 
             bb_up = tuple(slice(b.start * scale_factor, b.stop * scale_factor)
                           for b, scale_factor in zip(bb_grown, factor))

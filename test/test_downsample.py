@@ -16,6 +16,16 @@ class TestDownsample(unittest.TestCase):
         if os.path.exists(self.test_path):
             os.remove(self.test_path)
 
+    def check_block_artifacts(self, vol, block_shape):
+        first_block_border = np.s_[
+            block_shape[0] - 1:block_shape[0] + 1,
+            0:block_shape[1],
+            0:block_shape[2]
+        ]
+        first_border = vol[first_block_border]
+        for slice_ in first_border:
+            self.assertFalse(np.allclose(slice_, 0))
+
     def _test_downsample(self, shape, block_shape, scale_factor,
                          modes=DOWNSCALING_MODES):
         from pybdv.downsample import downsample
@@ -42,6 +52,7 @@ class TestDownsample(unittest.TestCase):
             # interpolate is more tricky ...
             if mode == 'interpolate':
                 self.assertEqual(exp_vol.shape, vol.shape)
+                self.check_block_artifacts(vol, block_shape)
             else:
                 self.assertTrue(np.allclose(vol, exp_vol))
 
@@ -94,6 +105,18 @@ class TestDownsample(unittest.TestCase):
                     self.assertEqual(exp_vol.shape, vol.shape)
                 else:
                     self.assertTrue(np.allclose(vol, exp_vol))
+
+    # def _test_block_artifacts(self, mode):
+    #     from pybdv.downsample import downsample
+    #     shape = (64, 64)
+    #     scale_factor = 2
+    #     input_vol = np.random.rand(*shape)
+    #     out = downsample(input_vol)
+
+    # # see https://github.com/constantinpape/pybdv/issues/38
+    # def test_block_artifacts(self):
+    #     for mode in DOWNSCALING_MODES:
+    #         self._test_block_artifacts(mode)
 
 
 if __name__ == '__main__':
