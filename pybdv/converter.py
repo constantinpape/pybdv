@@ -9,7 +9,7 @@ from .util import (blocking, open_file, get_key,
 from .metadata import (get_setup_ids, get_timeponts,
                        validate_affine, validate_attributes,
                        write_h5_metadata, write_xml_metadata, write_n5_metadata)
-from .downsample import downsample
+from .downsample import downsample, sample_shape
 from .dtypes import convert_to_bdv_dtype, get_new_dtype
 
 OVERWRITE_OPTIONS = ('skip', 'data', 'metadata', 'all')
@@ -465,3 +465,92 @@ def make_bdv(data, output_path,
                        overwrite=overwrite_metadata,
                        overwrite_data=overwrite_data,
                        enforce_consistency=enforce_consistency)
+
+
+def initialize_bdv(output_path, shape, dtype, setup_id=0, timepoint=0,
+                   setup_name=None, downscale_factors=None,
+                   resolution=[1., 1., 1.], unit='pixel',
+                   affine=None, attributes={'channel': {'id': None}},
+                   chunks=None):
+    """ Initalize a file in BigDatViewer file format for one view setup and timepoint.
+
+    Note that the default axis conventions of numpy and the native BDV implementation are
+    different. Numpy uses C-axis order, BDV uses F-axis order. Hence the shape of the
+    input data (Z,Y,X) will be stored as (X,Y,Z) in the metada. This also applies
+    to the values for the parameters resolution and downscale_factors: they need
+    to be passed as (Z,Y,X) and will be stored as (X,Y,Z).
+
+    Arguments:
+        output_path (str): output path to bdv file
+        shape (tuple): shape of the data
+        dtype (str or np.dtype): datatype
+        setup_id (int): id of this view set-up.(default: 0).
+        timepoint (int): time point id to write (default: 0)
+        setup_name (str): name of this view set-up (default: None)
+        downscale_factors (tuple or list): factors tused to create multi-scale pyramid.
+            The factors need to be specified per dimension and are interpreted relative to the previous factor.
+            If no argument is passed, pybdv does not create a multi-scale pyramid. (default: None)
+        resolution(list or tuple): resolution of the data
+        unit (str): unit of measurement
+        affine (list[float] or dict[str, list[float]]): affine view transformation(s) for this setup.
+            Can either be a list for a single transformation or a dictionary for multiple transformations.
+            Each transformation needs to be given in the bdv convention, i.e. using XYZ axis convention
+            unlike the other parameters of pybdv, that expect ZYX axis convention. (default: None)
+        attributes (dict[str, dict]): attributes associated with the view setups. Expects a dictionary
+            which maps the attribute anmes to their settings (also dict).
+            The setting dictionaries must contain the entry id is None.
+            If this entry's value is None, it will be set to the current highest id + 1.
+            (default: {'channel': {'id': None}})
+        chunks (tuple): chunks for the output dataset.
+            By default the h5py auto chunks are used (default: None)
+    """
+    if affine is not None:
+        validate_affine(affine)
+    data_path, xml_path, is_h5 = normalize_output_path(output_path)
+    attributes_ = validate_attributes(xml_path, attributes, setup_id, False)
+
+    # make sure the setup_id / timepoint combination does not exist yet
+    if os.path.exists(xml_path):
+        have_setup_id = setup_id in get_setup_ids(xml_path)
+        if have_setup_id and timepoint in get_timeponts(xml_path, setup_id):
+            raise RuntimeError(f"Setup {setup_id} and timepoint {timepoint} already exist in {output_path}.")
+
+    with open_file(data_path, mode="a") as f:
+        # create the base dataset
+        key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=0)
+        f.create_dataset(
+            key, shape=shape, compression="gzip", chunks=chunks, dtype=dtype
+        )
+
+        # create the downscaled datasets (if applicable)
+        if downscale_factors is None:
+            factors = [[1, 1, 1]]
+        else:
+            ds_shape = shape
+            for scale, factor in enumerate(downscale_factors, 1):
+                key = get_key(is_h5, timepoint=timepoint, setup_id=setup_id, scale=scale)
+                ds_shape = sample_shape(ds_shape, factor)
+                f.create_dataset(
+                    key, shape=ds_shape, compression="gzip", chunks=chunks, dtype=dtype
+                )
+            factors = [[1, 1, 1]] + downscale_factors
+
+    # write the format specific metadata in the output container
+    if is_h5:
+        write_h5_metadata(data_path, factors, setup_id, timepoint,
+                          overwrite=False)
+    else:
+        write_n5_metadata(data_path, factors, resolution, setup_id, timepoint,
+                          overwrite=False)
+
+    # write bdv xml metadata
+    write_xml_metadata(xml_path, data_path, unit,
+                       resolution, is_h5,
+                       setup_id=setup_id,
+                       timepoint=timepoint,
+                       setup_name=setup_name,
+                       affine=affine,
+                       attributes=attributes_,
+                       overwrite=False,
+                       overwrite_data=False,
+                       enforce_consistency=False)
