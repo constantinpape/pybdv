@@ -659,7 +659,7 @@ def write_affine(xml_path, setup_id, affine, overwrite, timepoint=0):
     Arguments:
         xml_path (str): path to the xml file with the bdv metadata
         setup_id (int): setup id for which the affine trafo(s) should be loaded
-        affine (list[int] or dict[list[int]]): affine transformation(s)
+        affine (list[float] or dict[list[float]]): affine transformation(s)
         overwrite (bool): whether to over-write existing transformations or add the new one
         timepoint (int): time point for which to load the affine (default: 0)
     """
