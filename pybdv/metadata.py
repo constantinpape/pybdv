@@ -822,6 +822,8 @@ def get_data_path(xml_path, return_absolute_path=False):
     if node is None:
         node = et.find('n5')
     if node is None:
+        node = et.find('ome.zarr')
+    if node is None:
         raise ValueError("Could not find valid data path in xml.")
     path = node.text
     # this assumes relative path in xml
