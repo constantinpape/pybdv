@@ -122,5 +122,5 @@ convert_to_bdv(input_path, input_key, output_path)
 
 ### On-the-fly processing
 
-Data can also be added on the fly, using first `pybdv.initialize_dataset` to create the bdv file and then `BdvDataset` to 
+Data can also be added on the fly, using `pybdv.initialize_dataset` to create the bdv file and then `BdvDataset` to 
 add (and downscale) new sub-regions of the data on the fly. See [examples/on-the-fly.py](https://github.com/constantinpape/pybdv/blob/master/examples/on_the_fly.py) for details.
