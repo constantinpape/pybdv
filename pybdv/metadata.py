@@ -795,6 +795,19 @@ def get_resolution(xml_path, setup_id):
     raise ValueError("Could not find setup %i" % setup_id)
 
 
+def get_unit(xml_path, setup_id):
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    seqdesc = root.find('SequenceDescription')
+    viewsets = seqdesc.find('ViewSetups')
+    vsetups = viewsets.findall('ViewSetup')
+    for vs in vsetups:
+        if vs.find('id').text == str(setup_id):
+            vox = vs.find('voxelSize')
+            return vox.find('unit').text
+    raise ValueError("Could not find setup %i" % setup_id)
+
+
 def get_size(xml_path, setup_id):
     tree = ET.parse(xml_path)
     root = tree.getroot()
