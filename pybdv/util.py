@@ -12,6 +12,7 @@ except ImportError:
 HDF5_EXTENSIONS = ['.h5', '.hdf', '.hdf5']
 XML_EXTENSIONS = ['.xml']
 N5_EXTENSIONS = ['.n5']
+ZARR_EXTENSIONS = ['.zarr']
 
 
 # if we don't have elf, define a simplified open_file function

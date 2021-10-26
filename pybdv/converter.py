@@ -6,6 +6,7 @@ from tqdm import tqdm
 
 from .util import (blocking, open_file, get_key,
                    HDF5_EXTENSIONS, N5_EXTENSIONS, XML_EXTENSIONS)
+                   HDF5_EXTENSIONS, N5_EXTENSIONS, XML_EXTENSIONS, ZARR_EXTENSIONS)
 from .metadata import (get_setup_ids, get_timeponts,
                        validate_affine, validate_attributes,
                        write_h5_metadata, write_xml_metadata, write_n5_metadata)
@@ -160,6 +161,10 @@ def normalize_output_path(output_path):
         data_path = base_path + '.h5'
         xml_path = output_path
     elif ext.lower() in N5_EXTENSIONS:
+        data_path = output_path
+        xml_path = base_path + '.xml'
+        is_h5 = False
+    elif ext.lower() in ZARR_EXTENSIONS:
         data_path = output_path
         xml_path = base_path + '.xml'
         is_h5 = False
