@@ -9,3 +9,4 @@ dist/
 
 *.err
 *.out
+.vscode/settings.json
