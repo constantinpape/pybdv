@@ -33,7 +33,7 @@ jobs:
       - name: Install pybdv
         if: matrix.os == 'ubuntu-latest'
         shell: bash -l {0}
-        run: pip install -e .
+        run: pip install -e .[dask]
       
       - name: Run tests
         shell: bash -l {0}

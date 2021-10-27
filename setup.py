@@ -11,7 +11,7 @@ requires = [
     "tqdm"
 ]
 
-extras = {"elf": ["elf"]}
+extras = {"elf": ["elf"], "dask": ["dask", "zarr"]}
 extras["all"] = list(itertools.chain.from_iterable(extras.values()))
 
 setup(
