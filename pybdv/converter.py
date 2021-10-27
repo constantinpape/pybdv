@@ -650,11 +650,10 @@ def make_bdv_from_dask_array(data, output_path,
     Arguments:
         data (dask.array): input data
         output_path (str): output path to bdv file needs to end with '.n5' or '.zarr'
-        downscale_factors (tuple or list): factors tused to create multi-scale pyramid.
+        downscale_factors (tuple or list): factors used to create multi-scale pyramid.
             The factors need to be specified per dimension and are interpreted relative to the previous factor.
             If no argument is passed, pybdv does not create a multi-scale pyramid. (default: None)
-        downscale_mode (str): mode used for downscaling.
-            Can be 'mean', 'max', 'min', 'nearest' or 'interpolate' (default:'nerarest').
+        downscale_func (function): function used to downsample (passed to dask.array coarsen, deafult is np.mean)
         resolution(list or tuple): resolution of the data
         unit (str): unit of measurement
         setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
@@ -675,11 +674,10 @@ def make_bdv_from_dask_array(data, output_path,
             - 'metadata': don't over-write data, over-write metadata
             - 'all': over-write both data and metadta
             (default: 'skip')
-        convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
-            This will map unsigned types to signed and fail if the value range is too large. (default: None)
-        chunks (tuple): chunks for the output dataset.
-            By default the h5py auto chunks are used (default: None)
-        n_threads (int): number of chunks used for writing and downscaling (default: 1)
+        chunks (tuple): chunks for the output dataset as the highest resolution level.
+            By default the current chunks are used
+        downsample_chunks (list of tuples): same as chunks but for each downsample level. 
+            By deafult is set to (64,64,64)
     """
     # validate input arguments
     if not has_dask:
