@@ -581,23 +581,22 @@ def make_scales_dask(data, data_path, is_n5, downscale_factors, downscale_func,
     if downsample_chunks is not None:
         if not all(len(chunks) == 3 for chunks in downsample_chunks):
             raise ValueError("Invalid downscale chunks")
-    # run single downsampling stages
-
+    # run all downsample steps for better data locality with dask
+    
+    base_key = get_key(is_h5=False, timepoint=timepoint, setup_id=setup_id, scale=0)
     pyramid = {}
-    pyramid['s0'] = data
+    pyramid[base_key] = data
     current_factor = np.array([1,1,1])
     for scale, (factor, chunks) in enumerate(zip(factors, downsample_chunks)):
-        key_ = 's%d' % scale + 1
+        key_ =  get_key(is_h5=False, timepoint=timepoint, setup_id=setup_id, scale=scale + 1)
         current_factor *= factor
         factor_dict = {k: v for k, v in zip(range(ndim), current_factor)}
         print(f'key: {key_}, factor: {current_factor}, dict: {factor_dict}, chunks:{chunks}')
         pyramid[key_] = da.coarsen(downscale_func, data, factor_dict, trim_excess=True).rechunk(chunks)
-    base_key = get_key(is_h5=False, timepoint=timepoint, setup_id=setup_id, scale=0)
-    path_all = os.path.join(data_path, base_key)
     if is_n5:
-        store = zarr.N5FSStore(path_all)
+        store = zarr.N5FSStore(data_path)
     else:
-        store = zarr.DirectoryStore(path_all)
+        store = zarr.DirectoryStore(data_path)
     group = zarr.open(store, mode='w')
     save_chunks_all = [data.chunksizes,] + downsample_chunks
     arrays = []
