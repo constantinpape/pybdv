@@ -40,6 +40,10 @@ if open_file is None:
             if n5_file is None:
                 raise ValueError("Need zarr or z5py to open n5 files")
             return n5_file(path, mode=mode)
+        elif ext in ZARR_EXTENSIONS:
+            if n5_file is None:
+                raise ValueError("Need zarr or z5py to open zarr files")
+            return n5_file(path, mode=mode)
         else:
             raise ValueError(f"Invalid extension: {ext}")
 else:
