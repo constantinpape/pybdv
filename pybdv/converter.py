@@ -569,43 +569,65 @@ def initialize_bdv(output_path, shape, dtype, setup_id=0, timepoint=0,
 
 def make_scales_dask(data, data_path, is_n5, downscale_factors, downscale_func,
                 ndim, setup_id, downsample_chunks=None, timepoint=0, overwrite=False):
-    if not all(isinstance(factor, (int, tuple, list)) for factor in downscale_factors):
-        raise ValueError("Invalid downscale factor")
-    if not all(len(factor) == 3 for factor in downscale_factors
-               if isinstance(factor, (tuple, list))):
-        raise ValueError("Invalid downscale factor")
+    if downscale_factors is not None:
+        if not all(isinstance(factor, (int, tuple, list)) for factor in downscale_factors):
+            raise ValueError("Invalid downscale factor")
+        if not all(len(factor) == 3 for factor in downscale_factors
+                if isinstance(factor, (tuple, list))):
+            raise ValueError("Invalid downscale factor")
     # normalize all factors to be tuple or list
-    factors = [ndim*[factor] if isinstance(factor, int) else factor
-               for factor in downscale_factors]
+        factors = [ndim*[factor] if isinstance(factor, int) else factor
+                for factor in downscale_factors]
     # make sure downsample chunks are also 3 items for each downsample factor
     if downsample_chunks is not None:
         if not all(len(chunks) == 3 for chunks in downsample_chunks):
             raise ValueError("Invalid downscale chunks")
-    # run all downsample steps for better data locality with dask
+    elif downscale_factors is not None:
+        downsample_chunks = tuple(( (64,64,64) for _ in range(len(downscale_factors))))       
     
-    base_key = get_key(is_h5=False, timepoint=timepoint, setup_id=setup_id, scale=0)
-    pyramid = {}
-    pyramid[base_key] = data
-    current_factor = np.array([1,1,1])
-    for scale, (factor, chunks) in enumerate(zip(factors, downsample_chunks)):
-        key_ =  get_key(is_h5=False, timepoint=timepoint, setup_id=setup_id, scale=scale + 1)
-        current_factor *= factor
-        factor_dict = {k: v for k, v in zip(range(ndim), current_factor)}
-        print(f'key: {key_}, factor: {current_factor}, dict: {factor_dict}, chunks:{chunks}')
-        pyramid[key_] = da.coarsen(downscale_func, data, factor_dict, trim_excess=True).rechunk(chunks)
+
     if is_n5:
-        store = zarr.N5FSStore(data_path)
+        store = zarr.N5FSStore(data_path, overwrite=overwrite)
     else:
         store = zarr.DirectoryStore(data_path)
-    group = zarr.open(store, mode='a')
-    save_chunks_all = [data.chunksize,] + downsample_chunks
-    arrays = []
-    for (k,v), save_chunks in zip(pyramid.items(), save_chunks_all):
-        arrays.append(group.zeros(name=k, shape=v.shape, dtype=v.dtype, 
-        chunks=save_chunks, compressor=GZip()))
-    da.store(pyramid.values(), arrays, lock=None)
+    with zarr.open(store, mode='a') as group:
+        # run all downsample steps for better data locality with dask
+        base_key = get_key(is_h5=False, timepoint=timepoint, setup_id=setup_id, scale=0)
+        have_data = base_key in group
+        if have_data and not overwrite:
+             # add first level to factors
+            if downscale_factors is not None:
+                factors = [[1, 1, 1]] + factors
+            else:
+                factors = [[1, 1, 1],]
+            return factors
+        pyramid = {}
+        pyramid[base_key] = data
+        print(f'key: {base_key}, factor: {[1,1,1]}, chunks:{data.chunksize}, size:{data.shape}')
+        if downscale_factors is not None:
+            current_factor = np.array([1,1,1])
+            for scale, (factor, chunks) in enumerate(zip(factors, downsample_chunks)):
+                key_ =  get_key(is_h5=False, timepoint=timepoint, setup_id=setup_id, scale=scale + 1)
+                current_factor *= factor
+                factor_dict = {k: v for k, v in zip(range(ndim), current_factor)}
+                print(f'key: {key_}, factor: {current_factor}, dict: {factor_dict}, chunks:{chunks}')
+                pyramid[key_] = da.coarsen(downscale_func, data, factor_dict, trim_excess=True).rechunk(chunks)
+
+        if downsample_chunks:
+            save_chunks_all = [data.chunksize,] + list(downsample_chunks)
+        else:
+            save_chunks_all = [data.chunksize,] 
+        arrays = []
+        for (k,v), save_chunks in zip(pyramid.items(), save_chunks_all):
+            arrays.append(group.zeros(name=k, shape=v.shape, dtype=v.dtype, 
+            chunks=save_chunks, compressor=GZip(), overwrite=overwrite))
+        da.store(pyramid.values(), arrays, lock=None)
+    
     # add first level to factors
-    factors = [[1, 1, 1]] + factors
+    if downscale_factors is not None:
+        factors = [[1, 1, 1]] + factors
+    else:
+        factors = [[1, 1, 1],]
     return factors
 
 def normalize_output_path_dask(output_path):
@@ -614,8 +636,9 @@ def normalize_output_path_dask(output_path):
     base_path, ext = os.path.splitext(output_path)
     is_n5 = False
     if ext == '':
-        data_path = output_path + '.zarr'
+        data_path = output_path + '.n5'
         xml_path = output_path + '.xml'
+        is_n5 = True
     elif ext.lower() in XML_EXTENSIONS:
         data_path = base_path + '.n5'
         xml_path = output_path
