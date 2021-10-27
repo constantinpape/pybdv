@@ -610,19 +610,20 @@ def make_scales_dask(data, data_path, is_n5, downscale_factors, downscale_func,
 
 def normalize_output_path_dask(output_path):
     # construct n5 or zarr output path and xml output path from output path
-    # defaults to .zarr for .xml or nothing
+    # defaults to .n5 for .xml or nothing
     base_path, ext = os.path.splitext(output_path)
     is_n5 = False
     if ext == '':
         data_path = output_path + '.zarr'
         xml_path = output_path + '.xml'
     elif ext.lower() in XML_EXTENSIONS:
-        data_path = base_path + '.zarr'
+        data_path = base_path + '.n5'
         xml_path = output_path
+        is_n5 = True
     elif ext.lower() in N5_EXTENSIONS:
         data_path = output_path
         xml_path = base_path + '.xml'
-        is_h5 = True
+        is_n5 = True
     elif ext.lower() in ZARR_EXTENSIONS:
         data_path = output_path
         xml_path = base_path + '.xml'
