@@ -597,7 +597,7 @@ def make_scales_dask(data, data_path, is_n5, downscale_factors, downscale_func,
         store = zarr.N5FSStore(data_path)
     else:
         store = zarr.DirectoryStore(data_path)
-    group = zarr.open(store, mode='w')
+    group = zarr.open(store, mode='a')
     save_chunks_all = [data.chunksize,] + downsample_chunks
     arrays = []
     for (k,v), save_chunks in zip(pyramid.items(), save_chunks_all):
