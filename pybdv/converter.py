@@ -651,12 +651,13 @@ def normalize_output_path_dask(output_path):
         data_path = output_path
         xml_path = base_path + '.xml'
     else:
-        raise ValueError("File extension %s not supported" % ext)
+        raise ValueError('File extension %s not supported, '  % ext + \
+                        '\nOnly .n5 and .zarr are supported with make_bdv_from_dask_array')
     return data_path, xml_path, is_n5
     
 
 def make_bdv_from_dask_array(data, output_path,
-             downscale_factors=None, downscale_func=np.mean,
+             downscale_factors=None, downscale_mode='mean',
              resolution=[1., 1., 1.], unit='pixel',
              setup_id=None, timepoint=0, setup_name=None,
              affine=None, attributes={'channel': {'id': None}},
@@ -676,7 +677,8 @@ def make_bdv_from_dask_array(data, output_path,
         downscale_factors (tuple or list): factors used to create multi-scale pyramid.
             The factors need to be specified per dimension and are interpreted relative to the previous factor.
             If no argument is passed, pybdv does not create a multi-scale pyramid. (default: None)
-        downscale_func (function): function used to downsample (passed to dask.array coarsen, deafult is np.mean)
+        downscale_mode (str or callable): How to downsample passes any callable function to dask.array coarsen), 
+        maps strings to functions, options are:'mean': np.mean (deafult), 'sum': np.sum.
         resolution(list or tuple): resolution of the data
         unit (str): unit of measurement
         setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
@@ -712,6 +714,16 @@ def make_bdv_from_dask_array(data, output_path,
         raise ValueError("Invalid input dimensionality")
     if affine is not None:
         validate_affine(affine)
+    # downsample options
+    downscale_dict = {'mean': np.mean, 'sum': np.sum}
+    options = list(downscale_dict.keys())
+    if isinstance(downscale_mode, str):
+        if downscale_mode not in downscale_dict:
+            raise ValueError('downscale_mode "%s" not found in options %s' % (downscale_mode, options))
+        else:
+            downscale_mode = downscale_dict[downscale_mode]
+    elif not callable(downscale_mode):
+        raise ValueError('downscale_mode %s not supprorted (need string %s or callable)' % (downscale_mode, options))
     is_h5 = False
     data_path, xml_path, is_n5 = normalize_output_path_dask(output_path)
     setup_id, overwrite_data, overwrite_metadata, skip = handle_setup_id(setup_id,
@@ -736,7 +748,7 @@ def make_bdv_from_dask_array(data, output_path,
     if downscale_factors is None:
         # set single level downscale factor
         factors = [[1, 1, 1]]
-    factors= make_scales_dask(data, data_path, is_n5, downscale_factors, downscale_func,
+    factors= make_scales_dask(data, data_path, is_n5, downscale_factors, downscale_mode,
                     ndim, setup_id, downsample_chunks=downsample_chunks,
                     timepoint=timepoint, overwrite=overwrite_data)
 

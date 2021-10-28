@@ -1,4 +1,5 @@
 import os
+import pytest
 import unittest
 from abc import ABC
 from shutil import rmtree
@@ -114,7 +115,7 @@ class MakeBdvTestMixin(ABC):
             data_exp = tp_data[tp]
             self.assertTrue(np.allclose(data, data_exp))
 
-    def _test_ds(self, shape, func):
+    def _test_ds(self, shape, mode):
         from pybdv import make_bdv_from_dask_array
         data = da.random.random(shape).astype('float32')
 
@@ -122,7 +123,7 @@ class MakeBdvTestMixin(ABC):
         ndim = len(shape)
         downscale_factors = n_scales * [[2] * ndim]
         make_bdv_from_dask_array(data, self.out_path, downscale_factors,
-                 downscale_func=func)
+                 downscale_mode=mode)
 
         exp_shape = shape
         self.assertTrue(os.path.exists(self.out_path))
@@ -137,7 +138,23 @@ class MakeBdvTestMixin(ABC):
 
     def test_ds_mean(self):
         shape = (256,) * 3
-        self._test_ds(shape, np.mean)
+        self._test_ds(shape, 'mean')
+        
+    def test_ds_sum(self):
+        shape = (256,) * 3
+        self._test_ds(shape, 'sum')
+
+    def test_ds_nope(self):
+        shape = (256,) * 3
+        with self.assertRaises(ValueError) as context:
+            self._test_ds(shape, 'nope')
+        self.assertTrue('not found in options' in str(context.exception))
+
+    def test_ds_not_callable(self):
+        shape = (256,) * 3
+        with self.assertRaises(ValueError) as context:
+            self._test_ds(shape, 9)
+        self.assertTrue('not supprorted' in str(context.exception))
 
     def test_custom_chunks(self):
         from pybdv import make_bdv_from_dask_array
@@ -289,7 +306,7 @@ class TestMakeBdvN5(MakeBdvTestMixin, unittest.TestCase):
 
 
 @unittest.skipIf(n5_file is None, "Need zarr or z5py for zarr support")
-class TestMakeBdvN5(MakeBdvTestMixin, unittest.TestCase):
+class TestMakeBdvZarr(MakeBdvTestMixin, unittest.TestCase):
     out_path = './tmp/test.zarr'
     is_h5 = False
 
