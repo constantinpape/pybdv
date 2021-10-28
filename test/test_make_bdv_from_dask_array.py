@@ -40,6 +40,13 @@ class MakeBdvTestMixin(ABC):
     def test_simple(self):
         shape = (100, 100, 100)
         self._test_simple(shape)
+    
+    def test_simple_hdf5(self):
+        self.out_path = './tmp/test.h5'
+        shape = (100, 100, 100)
+        with self.assertRaises(ValueError) as context:
+            self._test_simple(shape)
+        self.assertTrue('HDF5 files are not supported' in str(context.exception))
 
     def test_affine(self):
         from pybdv.metadata import get_affine

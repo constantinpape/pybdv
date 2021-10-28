@@ -650,6 +650,8 @@ def normalize_output_path_dask(output_path):
     elif ext.lower() in ZARR_EXTENSIONS:
         data_path = output_path
         xml_path = base_path + '.xml'
+    elif ext.lower() in HDF5_EXTENSIONS:
+        raise ValueError('HDF5 files are not supported when using dask arrays')
     else:
         raise ValueError('File extension %s not supported, '  % ext + \
                         '\nOnly .n5 and .zarr are supported with make_bdv_from_dask_array')
