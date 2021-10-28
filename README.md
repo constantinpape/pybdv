@@ -124,3 +124,9 @@ convert_to_bdv(input_path, input_key, output_path)
 
 Data can also be added on the fly, using `pybdv.initialize_dataset` to create the bdv file and then `BdvDataset` to 
 add (and downscale) new sub-regions of the data on the fly. See [examples/on-the-fly.py](https://github.com/constantinpape/pybdv/blob/master/examples/on_the_fly.py) for details.
+
+
+### Dask array support
+
+You can use the `pybdv.make_bdv_from_dask_array` function and pass a [dask array](https://docs.dask.org/en/stable/array.html). Currently only `zarr` and `n5` are supported and a limited options for downsampling (using [`dask.array.coarsen`](https://docs.dask.org/en/stable/generated/dask.array.coarsen.html#dask.array.coarsen)). See [examples/dask_array.py](https://github.com/constantinpape/pybdv/blob/master/examples/dask_array.py) for details.
+

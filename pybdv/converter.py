@@ -603,14 +603,12 @@ def make_scales_dask(data, data_path, is_n5, downscale_factors, downscale_func,
             return factors
         pyramid = {}
         pyramid[base_key] = data
-        print(f'key: {base_key}, factor: {[1,1,1]}, chunks:{data.chunksize}, size:{data.shape}')
         if downscale_factors is not None:
             current_factor = np.array([1,1,1])
             for scale, (factor, chunks) in enumerate(zip(factors, downsample_chunks)):
                 key_ =  get_key(is_h5=False, timepoint=timepoint, setup_id=setup_id, scale=scale + 1)
                 current_factor *= factor
                 factor_dict = {k: v for k, v in zip(range(ndim), current_factor)}
-                print(f'key: {key_}, factor: {current_factor}, dict: {factor_dict}, chunks:{chunks}')
                 pyramid[key_] = da.coarsen(downscale_func, data, factor_dict, trim_excess=True).rechunk(chunks)
 
         if downsample_chunks:
