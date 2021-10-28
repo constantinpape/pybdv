@@ -1,5 +1,4 @@
 import os
-import pytest
 import unittest
 from abc import ABC
 from shutil import rmtree
