@@ -5,7 +5,7 @@ from concurrent import futures
 from tqdm import tqdm
 
 from .util import (blocking, open_file, get_key,
-                   HDF5_EXTENSIONS, N5_EXTENSIONS, XML_EXTENSIONS)
+                   HDF5_EXTENSIONS, N5_EXTENSIONS, XML_EXTENSIONS, ZARR_EXTENSIONS)
 from .metadata import (get_setup_ids, get_timeponts,
                        validate_affine, validate_attributes,
                        write_h5_metadata, write_xml_metadata, write_n5_metadata)
@@ -13,6 +13,14 @@ from .downsample import downsample, sample_shape
 from .dtypes import convert_to_bdv_dtype, get_new_dtype
 
 OVERWRITE_OPTIONS = ('skip', 'data', 'metadata', 'all')
+
+try:
+    import dask.array as da
+    import zarr
+    from numcodecs import GZip
+    has_dask = True
+except ImportError:
+    has_dask = False
 
 
 def handle_setup_id(setup_id, xml_path, timepoint, overwrite, is_h5):
@@ -160,6 +168,10 @@ def normalize_output_path(output_path):
         data_path = base_path + '.h5'
         xml_path = output_path
     elif ext.lower() in N5_EXTENSIONS:
+        data_path = output_path
+        xml_path = base_path + '.xml'
+        is_h5 = False
+    elif ext.lower() in ZARR_EXTENSIONS:
         data_path = output_path
         xml_path = base_path + '.xml'
         is_h5 = False
@@ -554,3 +566,204 @@ def initialize_bdv(output_path, shape, dtype, setup_id=0, timepoint=0,
                        overwrite=False,
                        overwrite_data=False,
                        enforce_consistency=False)
+
+def make_scales_dask(data, data_path, is_n5, downscale_factors, downscale_func,
+                ndim, setup_id, downsample_chunks=None, timepoint=0, overwrite=False):
+    if downscale_factors is not None:
+        if not all(isinstance(factor, (int, tuple, list)) for factor in downscale_factors):
+            raise ValueError("Invalid downscale factor")
+        if not all(len(factor) == 3 for factor in downscale_factors
+                if isinstance(factor, (tuple, list))):
+            raise ValueError("Invalid downscale factor")
+    # normalize all factors to be tuple or list
+        factors = [ndim*[factor] if isinstance(factor, int) else factor
+                for factor in downscale_factors]
+    # make sure downsample chunks are also 3 items for each downsample factor
+    if downsample_chunks is not None:
+        if not all(len(chunks) == 3 for chunks in downsample_chunks):
+            raise ValueError("Invalid downscale chunks")
+    elif downscale_factors is not None:
+        downsample_chunks = tuple(( (64,64,64) for _ in range(len(downscale_factors))))       
+    
+
+    if is_n5:
+        store = zarr.N5FSStore(data_path, overwrite=overwrite)
+    else:
+        store = zarr.DirectoryStore(data_path)
+    with zarr.open(store, mode='a') as group:
+        # run all downsample steps for better data locality with dask
+        base_key = get_key(is_h5=False, timepoint=timepoint, setup_id=setup_id, scale=0)
+        have_data = base_key in group
+        if have_data and not overwrite:
+             # add first level to factors
+            if downscale_factors is not None:
+                factors = [[1, 1, 1]] + factors
+            else:
+                factors = [[1, 1, 1],]
+            return factors
+        pyramid = {}
+        pyramid[base_key] = data
+        if downscale_factors is not None:
+            current_factor = np.array([1,1,1])
+            for scale, (factor, chunks) in enumerate(zip(factors, downsample_chunks)):
+                key_ =  get_key(is_h5=False, timepoint=timepoint, setup_id=setup_id, scale=scale + 1)
+                current_factor *= factor
+                factor_dict = {k: v for k, v in zip(range(ndim), current_factor)}
+                pyramid[key_] = da.coarsen(downscale_func, data, factor_dict, trim_excess=True).rechunk(chunks)
+
+        if downsample_chunks:
+            save_chunks_all = [data.chunksize,] + list(downsample_chunks)
+        else:
+            save_chunks_all = [data.chunksize,] 
+        arrays = []
+        for (k,v), save_chunks in zip(pyramid.items(), save_chunks_all):
+            arrays.append(group.zeros(name=k, shape=v.shape, dtype=v.dtype, 
+            chunks=save_chunks, compressor=GZip(), overwrite=overwrite))
+        da.store(pyramid.values(), arrays, lock=None)
+    
+    # add first level to factors
+    if downscale_factors is not None:
+        factors = [[1, 1, 1]] + factors
+    else:
+        factors = [[1, 1, 1],]
+    return factors
+
+def normalize_output_path_dask(output_path):
+    # construct n5 or zarr output path and xml output path from output path
+    # defaults to .n5 for .xml or nothing
+    base_path, ext = os.path.splitext(output_path)
+    is_n5 = False
+    if ext == '':
+        data_path = output_path + '.n5'
+        xml_path = output_path + '.xml'
+        is_n5 = True
+    elif ext.lower() in XML_EXTENSIONS:
+        data_path = base_path + '.n5'
+        xml_path = output_path
+        is_n5 = True
+    elif ext.lower() in N5_EXTENSIONS:
+        data_path = output_path
+        xml_path = base_path + '.xml'
+        is_n5 = True
+    elif ext.lower() in ZARR_EXTENSIONS:
+        data_path = output_path
+        xml_path = base_path + '.xml'
+    elif ext.lower() in HDF5_EXTENSIONS:
+        raise ValueError('HDF5 files are not supported when using dask arrays')
+    else:
+        raise ValueError('File extension %s not supported, '  % ext + \
+                        '\nOnly .n5 and .zarr are supported with make_bdv_from_dask_array')
+    return data_path, xml_path, is_n5
+    
+
+def make_bdv_from_dask_array(data, output_path,
+             downscale_factors=None, downscale_mode='mean',
+             resolution=[1., 1., 1.], unit='pixel',
+             setup_id=None, timepoint=0, setup_name=None,
+             affine=None, attributes={'channel': {'id': None}},
+             overwrite='skip', chunks=None, downsample_chunks=None):
+    """ Write data in BigDatViewer file format for one view setup and timepoint.
+
+    Optionally downscale the input volume and write it to BigDataViewer scale pyramid.
+    Note that the default axis conventions of numpy and the native BDV implementation are
+    different. Numpy uses C-axis order, BDV uses F-axis order. Hence the shape of the
+    input data (Z,Y,X) will be stored as (X,Y,Z) in the metada. This also applies
+    to the values for the parameters resolution and downscale_factors: they need
+    to be passed as (Z,Y,X) and will be stored as (X,Y,Z).
+
+    Arguments:
+        data (dask.array): input data
+        output_path (str): output path to bdv file needs to end with '.n5' or '.zarr'
+        downscale_factors (tuple or list): factors used to create multi-scale pyramid.
+            The factors need to be specified per dimension and are interpreted relative to the previous factor.
+            If no argument is passed, pybdv does not create a multi-scale pyramid. (default: None)
+        downscale_mode (str or callable): How to downsample passes any callable function to dask.array coarsen), 
+        maps strings to functions, options are:'mean': np.mean (deafult), 'sum': np.sum.
+        resolution(list or tuple): resolution of the data
+        unit (str): unit of measurement
+        setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
+        timepoint (int): time point id to write (default: 0)
+        setup_name (str): name of this view set-up (default: None)
+        affine (list[float] or dict[str, list[float]]): affine view transformation(s) for this setup.
+            Can either be a list for a single transformation or a dictionary for multiple transformations.
+            Each transformation needs to be given in the bdv convention, i.e. using XYZ axis convention
+            unlike the other parameters of pybdv, that expect ZYX axis convention. (default: None)
+        attributes (dict[str, dict]): attributes associated with the view setups. Expects a dictionary
+            which maps the attribute anmes to their settings (also dict).
+            The setting dictionaries must contain the entry id is None.
+            If this entry's value is None, it will be set to the current highest id + 1.
+            (default: {'channel': {'id': None}})
+        overwrite (str): whether to over-write or skip existing data and/or metadta. Can be one of
+            - 'skip': don't over-write data or metadata
+            - 'data': over-write data, don't over-write metadata
+            - 'metadata': don't over-write data, over-write metadata
+            - 'all': over-write both data and metadta
+            (default: 'skip')
+        chunks (tuple): chunks for the output dataset as the highest resolution level.
+            By default the current chunks are used
+        downsample_chunks (list of tuples): same as chunks but for each downsample level. 
+            By deafult is set to (64,64,64)
+    """
+    # validate input arguments
+    if not has_dask:
+        raise ImportError("Please install dask to use this function")
+    if not isinstance(data, da.Array):
+        raise ValueError("Input needs to be dask array, got %s" % type(data))
+    ndim = data.ndim
+    if ndim != 3 or len(resolution) != ndim:
+        raise ValueError("Invalid input dimensionality")
+    if affine is not None:
+        validate_affine(affine)
+    # downsample options
+    downscale_dict = {'mean': np.mean, 'sum': np.sum}
+    options = list(downscale_dict.keys())
+    if isinstance(downscale_mode, str):
+        if downscale_mode not in downscale_dict:
+            raise ValueError('downscale_mode "%s" not found in options %s' % (downscale_mode, options))
+        else:
+            downscale_mode = downscale_dict[downscale_mode]
+    elif not callable(downscale_mode):
+        raise ValueError('downscale_mode %s not supprorted (need string %s or callable)' % (downscale_mode, options))
+    is_h5 = False
+    data_path, xml_path, is_n5 = normalize_output_path_dask(output_path)
+    setup_id, overwrite_data, overwrite_metadata, skip = handle_setup_id(setup_id,
+                                                                         xml_path,
+                                                                         timepoint,
+                                                                         overwrite,
+                                                                         is_h5)
+    if skip:
+        return
+
+    # validate the attributes
+    # if overwrite_data or overwrite_metadata was set, we do not enforce consistency of the attributes
+    enforce_consistency = not (overwrite_data or overwrite_metadata)
+    attributes_ = validate_attributes(xml_path, attributes, setup_id, enforce_consistency)
+
+    # we need to convert the dtype only for the hdf5 based storage
+
+    # set proper chunks
+    if chunks is not None:
+        data = data.rechunk(chunks)
+    # write dataset and scales in one operation to presever data locality
+    if downscale_factors is None:
+        # set single level downscale factor
+        factors = [[1, 1, 1]]
+    factors= make_scales_dask(data, data_path, is_n5, downscale_factors, downscale_mode,
+                    ndim, setup_id, downsample_chunks=downsample_chunks,
+                    timepoint=timepoint, overwrite=overwrite_data)
+
+    # write the format specific metadata in the output container
+    write_n5_metadata(data_path, factors, resolution, setup_id, timepoint,
+                          overwrite=overwrite_data)
+
+    # write bdv xml metadata
+    write_xml_metadata(xml_path, data_path, unit,
+                       resolution, is_h5,
+                       setup_id=setup_id,
+                       timepoint=timepoint,
+                       setup_name=setup_name,
+                       affine=affine,
+                       attributes=attributes_,
+                       overwrite=overwrite_metadata,
+                       overwrite_data=overwrite_data,
+                       enforce_consistency=enforce_consistency)
