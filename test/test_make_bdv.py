@@ -4,12 +4,19 @@ from abc import ABC
 from shutil import rmtree
 
 import numpy as np
+from pybdv import has_dask, make_bdv, make_bdv_from_dask_array
 from pybdv.util import get_key, open_file, n5_file
+
+if has_dask:
+    import dask
 
 
 class MakeBdvTestMixin(ABC):
     tmp_folder = './tmp'
     xml_path = './tmp/test.xml'
+
+    def _make_bdv(self, data, *args, **kwargs):
+        make_bdv(data, *args, **kwargs)
 
     def setUp(self):
         os.makedirs(self.tmp_folder, exist_ok=True)
@@ -21,10 +28,8 @@ class MakeBdvTestMixin(ABC):
             pass
 
     def _test_simple(self, shape, affine=None):
-        from pybdv import make_bdv
         data = np.random.rand(*shape).astype('float32')
-
-        make_bdv(data, self.out_path, affine=affine)
+        self._make_bdv(data, self.out_path, affine=affine)
 
         key = get_key(self.is_h5, timepoint=0, setup_id=0, scale=0)
         self.assertTrue(os.path.exists(self.out_path))
@@ -49,7 +54,6 @@ class MakeBdvTestMixin(ABC):
         self.assertEqual(affine, affine_out)
 
     def test_multi_setup(self):
-        from pybdv import make_bdv
         from pybdv.metadata import get_affine
         shape = (64,) * 3
         n_views = 2
@@ -61,13 +65,13 @@ class MakeBdvTestMixin(ABC):
             data = np.random.rand(*shape).astype('float32')
             affine = {'trafo1': [round(aff, 4) for aff in np.random.rand(12)],
                       'trafo2': [round(aff, 4) for aff in np.random.rand(12)]}
-            make_bdv(data, self.out_path, setup_id=vid, affine=affine)
+            self._make_bdv(data, self.out_path, setup_id=vid, affine=affine)
             data_dict[vid] = data
             affine_dict[vid] = affine
 
         # check implicit setup id
         data = np.random.rand(*shape).astype('float32')
-        make_bdv(data, self.out_path)
+        self._make_bdv(data, self.out_path)
         data_dict[n_views] = data
 
         for vid in range(n_views + 1):
@@ -85,7 +89,6 @@ class MakeBdvTestMixin(ABC):
             self.assertEqual(affine, affine_out)
 
     def test_multi_timepoint(self):
-        from pybdv import make_bdv
         from pybdv.metadata import get_time_range
 
         n_timepoints = 6
@@ -97,7 +100,7 @@ class MakeBdvTestMixin(ABC):
             data = np.random.rand(*shape)
             # make sure that we at least have 2 setup ids that agree
             setup_id = np.random.randint(0, 20) if tp > 1 else 0
-            make_bdv(data, self.out_path, setup_id=setup_id, timepoint=tp)
+            self._make_bdv(data, self.out_path, setup_id=setup_id, timepoint=tp)
             tp_data.append(data)
             tp_setups.append(setup_id)
 
@@ -114,14 +117,16 @@ class MakeBdvTestMixin(ABC):
             self.assertTrue(np.allclose(data, data_exp))
 
     def _test_ds(self, shape, mode):
-        from pybdv import make_bdv
         data = np.random.rand(*shape).astype('float32')
+
+        if mode in ("nearest", "interpolate") and not getattr(self, "supports_interpolation", True):
+            return
 
         n_scales = 4
         ndim = len(shape)
         downscale_factors = n_scales * [[2] * ndim]
-        make_bdv(data, self.out_path, downscale_factors,
-                 downscale_mode=mode)
+        self._make_bdv(data, self.out_path, downscale_factors,
+                       downscale_mode=mode)
 
         exp_shape = shape
         self.assertTrue(os.path.exists(self.out_path))
@@ -146,28 +151,26 @@ class MakeBdvTestMixin(ABC):
         if not self.is_h5:
             return
 
-        from pybdv import make_bdv
         shape = (128,) * 3
 
         val = np.iinfo('uint16').max + 1
         data = np.full(shape, val, dtype='uint32')
 
-        make_bdv(data, self.out_path, convert_dtype=False)
+        self._make_bdv(data, self.out_path, convert_dtype=False)
         with open_file(self.out_path, 'r') as f:
             key = get_key(self.is_h5, timepoint=0, setup_id=0, scale=0)
             d = f[key][:]
         self.assertTrue(np.array_equal(d, data))
 
         with self.assertRaises(RuntimeError):
-            make_bdv(d, './tmp.test2.h5', convert_dtype=True)
+            self._make_bdv(d, './tmp.test2.h5', convert_dtype=True)
 
     def test_custom_chunks(self):
-        from pybdv import make_bdv
         shape = (128,) * 3
         chunks = (64, 42, 59)
 
         data = np.random.rand(*shape)
-        make_bdv(data, self.out_path, chunks=chunks)
+        self._make_bdv(data, self.out_path, chunks=chunks)
 
         key = get_key(self.is_h5, timepoint=0, setup_id=0, scale=0)
         with open_file(self.out_path, 'r') as f:
@@ -178,22 +181,20 @@ class MakeBdvTestMixin(ABC):
         self.assertTrue(np.allclose(d, data))
 
     def test_multi_threaded(self):
-        from pybdv import make_bdv
         shape = (128,) * 3
         chunks = (64,) * 3
 
         data = np.random.rand(*shape)
         scale_factors = 2 * [[2, 2, 2]]
 
-        make_bdv(data, self.out_path, chunks=chunks,
-                 n_threads=4, downscale_factors=scale_factors)
+        self._make_bdv(data, self.out_path, chunks=chunks,
+                       n_threads=4, downscale_factors=scale_factors)
         key = get_key(self.is_h5, timepoint=0, setup_id=0, scale=0)
         with open_file(self.out_path, 'r') as f:
             d = f[key][:]
         self.assertTrue(np.allclose(d, data))
 
     def test_custom_attributes(self):
-        from pybdv import make_bdv
         from pybdv.metadata import get_attributes
         shape = (64,) * 3
 
@@ -203,10 +204,10 @@ class MakeBdvTestMixin(ABC):
         tile_name = 'some-tile'
         angle_name = 'some-angle'
         # write setup 0
-        make_bdv(data, self.out_path, setup_id=0,
-                 attributes={'channel': {'id': None, 'name': chan_name},
-                             'tile': {'id': 2, 'name': tile_name},
-                             'angle': {'id': 0, 'name': angle_name}})
+        self._make_bdv(data, self.out_path, setup_id=0,
+                       attributes={'channel': {'id': None, 'name': chan_name},
+                                   'tile': {'id': 2, 'name': tile_name},
+                                   'angle': {'id': 0, 'name': angle_name}})
         attrs_out = get_attributes(self.xml_path, 0)
         attrs_exp = {'channel': {'id': 0, 'name': chan_name},
                      'tile': {'id': 2, 'name': tile_name},
@@ -214,10 +215,10 @@ class MakeBdvTestMixin(ABC):
         self.assertEqual(attrs_out, attrs_exp)
 
         # write setup 1
-        make_bdv(data, self.out_path, setup_id=None,
-                 attributes={'channel': {'id': None},
-                             'tile': {'id': 2},
-                             'angle': {'id': 0}})
+        self._make_bdv(data, self.out_path, setup_id=None,
+                       attributes={'channel': {'id': None},
+                                   'tile': {'id': 2},
+                                   'angle': {'id': 0}})
         attrs_out = get_attributes(self.xml_path, 1)
         attrs_exp = {'channel': {'id': 1},
                      'tile': {'id': 2, 'name': tile_name},
@@ -225,10 +226,10 @@ class MakeBdvTestMixin(ABC):
         self.assertEqual(attrs_out, attrs_exp)
 
         # write to setup 0 again with different timepoint
-        make_bdv(data, self.out_path, setup_id=0, timepoint=1,
-                 attributes={'channel': {'id': None},
-                             'tile': {'id': 2},
-                             'angle': {'id': 0}})
+        self._make_bdv(data, self.out_path, setup_id=0, timepoint=1,
+                       attributes={'channel': {'id': None},
+                                   'tile': {'id': 2},
+                                   'angle': {'id': 0}})
         attrs_out = get_attributes(self.xml_path, 0)
         attrs_exp = {'channel': {'id': 0, 'name': chan_name},
                      'tile': {'id': 2, 'name': tile_name},
@@ -238,23 +239,22 @@ class MakeBdvTestMixin(ABC):
         # write next setup id without specifying all attribute names
         # -> should fail
         with self.assertRaises(ValueError):
-            make_bdv(data, self.out_path, setup_id=None,
-                     attributes={'channel': {'id': 5}, 'tile': {'id': 2}})
+            self._make_bdv(data, self.out_path, setup_id=None,
+                           attributes={'channel': {'id': 5}, 'tile': {'id': 2}})
 
         # write next setup id with a new attribute name
         # -> should fail
         with self.assertRaises(ValueError):
-            make_bdv(data, self.out_path, setup_id=None,
-                     attributes={'channel': {'id': 5}, 'settings': {'id': 2}})
+            self._make_bdv(data, self.out_path, setup_id=None,
+                           attributes={'channel': {'id': 5}, 'settings': {'id': 2}})
 
         # write exisiting setup id with  different attribute setup
         # -> should fail
         with self.assertRaises(ValueError):
-            make_bdv(data, self.out_path, setup_id=0, timepoint=2,
-                     attributes={'channel': {'id': 5}, 'tile': {'id': 2}, 'angle': {'id': 0}})
+            self._make_bdv(data, self.out_path, setup_id=0, timepoint=2,
+                           attributes={'channel': {'id': 5}, 'tile': {'id': 2}, 'angle': {'id': 0}})
 
     def _test_overwrite(self, mode):
-        from pybdv import make_bdv
         from pybdv.util import get_scale_factors, absolute_to_relative_scale_factors
         from pybdv.metadata import get_attributes, get_affine
 
@@ -286,14 +286,14 @@ class MakeBdvTestMixin(ABC):
         attrs2 = {'channel': {'id': 3}, 'angle': {'id': 6}}
         affine2 = np.random.rand(12).tolist()
 
-        make_bdv(data1, self.out_path, setup_id=0, timepoint=0,
-                 downscale_factors=sf1, attributes=attrs1,
-                 affine=affine1)
+        self._make_bdv(data1, self.out_path, setup_id=0, timepoint=0,
+                       downscale_factors=sf1, attributes=attrs1,
+                       affine=affine1)
         _check(data1, sf1, attrs1, affine1)
 
-        make_bdv(data2, self.out_path, setup_id=0, timepoint=0,
-                 downscale_factors=sf2, attributes=attrs2, affine=affine2,
-                 overwrite=mode)
+        self._make_bdv(data2, self.out_path, setup_id=0, timepoint=0,
+                       downscale_factors=sf2, attributes=attrs2, affine=affine2,
+                       overwrite=mode)
 
         if mode == 'skip':
             _check(data1, sf1, attrs1, affine1)
@@ -328,6 +328,26 @@ class TestMakeBdvH5(MakeBdvTestMixin, unittest.TestCase):
 class TestMakeBdvN5(MakeBdvTestMixin, unittest.TestCase):
     out_path = './tmp/test.n5'
     is_h5 = False
+
+
+@unittest.skipUnless(has_dask, "Need dask")
+class TestMakeBdvDaskN5(MakeBdvTestMixin, unittest.TestCase):
+    out_path = './tmp/test.n5'
+    is_h5 = False
+    supports_interpolation = False
+
+    def _make_bdv(self, data, *args, **kwargs):
+        make_bdv_from_dask_array(dask.array.from_array(data), *args, **kwargs)
+
+
+@unittest.skipUnless(has_dask, "Need dask")
+class TestMakeBdvDaskZarr(MakeBdvTestMixin, unittest.TestCase):
+    out_path = './tmp/test.zarr'
+    is_h5 = False
+    supports_interpolation = False
+
+    def _make_bdv(self, data, *args, **kwargs):
+        make_bdv_from_dask_array(dask.array.from_array(data), *args, **kwargs)
 
 
 if __name__ == '__main__':
