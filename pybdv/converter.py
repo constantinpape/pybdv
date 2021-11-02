@@ -665,7 +665,8 @@ def make_bdv_from_dask_array(data, output_path,
                              resolution=[1., 1., 1.], unit='pixel',
                              setup_id=None, timepoint=0, setup_name=None,
                              affine=None, attributes={'channel': {'id': None}},
-                             overwrite='skip', chunks=None, downsample_chunks=None):
+                             overwrite='skip', chunks=None, downsample_chunks=None,
+                             n_threads=1):
     """ Write data in BigDatViewer file format for one view setup and timepoint.
 
     Optionally downscale the input volume and write it to BigDataViewer scale pyramid.
@@ -707,6 +708,7 @@ def make_bdv_from_dask_array(data, output_path,
             By default the current chunks are used
         downsample_chunks (list of tuples): same as chunks but for each downsample level.
             By deafult is set to (64,64,64)
+        n_threads (int): dummy argument to be compatible with other function signatures (default: 1).
     """
     # validate input arguments
     if not has_dask:
