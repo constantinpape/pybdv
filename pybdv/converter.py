@@ -232,7 +232,7 @@ def convert_to_bdv(input_path, input_key, output_path,
             If no argument is passed, pybdv does not create a multi-scale pyramid. (default: None)
         downscale_mode (str or callable): mode used for downscaling.
             Can be 'mean', 'max', 'min', 'nearest', 'sum' or 'interpolate'.
-            Custom downscaling functions cann also be passed (default:'nerarest').
+            Custom downscaling functions can also be passed (default:'nerarest').
         resolution(list or tuple): resolution of the data
         unit (str): unit of measurement
         setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
@@ -381,7 +381,7 @@ def make_bdv(data, output_path,
             If no argument is passed, pybdv does not create a multi-scale pyramid. (default: None)
         downscale_mode (str or callable): mode used for downscaling.
             Can be 'mean', 'max', 'min', 'nearest' or 'interpolate'.
-            Custom downscaling functions cann also be passed (default:'nerarest').
+            Custom downscaling functions can also be passed (default:'nerarest').
         resolution(list or tuple): resolution of the data
         unit (str): unit of measurement
         setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
