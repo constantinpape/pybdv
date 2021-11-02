@@ -119,6 +119,9 @@ class MakeBdvTestMixin(ABC):
     def _test_ds(self, shape, mode):
         data = np.random.rand(*shape).astype('float32')
 
+        if mode in ("nearest", "interpolate") and not getattr(self, "supports_interpolation", True):
+            return
+
         n_scales = 4
         ndim = len(shape)
         downscale_factors = n_scales * [[2] * ndim]
@@ -331,6 +334,7 @@ class TestMakeBdvN5(MakeBdvTestMixin, unittest.TestCase):
 class TestMakeBdvDaskN5(MakeBdvTestMixin, unittest.TestCase):
     out_path = './tmp/test.n5'
     is_h5 = False
+    supports_interpolation = False
 
     def _make_bdv(self, data, *args, **kwargs):
         make_bdv_from_dask_array(dask.array.from_array(data), *args, **kwargs)
@@ -340,6 +344,7 @@ class TestMakeBdvDaskN5(MakeBdvTestMixin, unittest.TestCase):
 class TestMakeBdvDaskZarr(MakeBdvTestMixin, unittest.TestCase):
     out_path = './tmp/test.zarr'
     is_h5 = False
+    supports_interpolation = False
 
     def _make_bdv(self, data, *args, **kwargs):
         make_bdv_from_dask_array(dask.array.from_array(data), *args, **kwargs)

@@ -11,7 +11,7 @@ from .util import blocking, grow_bounding_box, open_file
 
 def ds_interpolate(data, scale_factor, out_shape, order):
     dtype = data.dtype
-    out = resize(data, out_shape, order=order, mode='constant',
+    out = resize(data, out_shape, order=order, mode="constant",
                  anti_aliasing=order > 0, preserve_range=True)
     return out.astype(dtype)
 
@@ -36,17 +36,21 @@ def sample_shape(shape, factor, add_incomplete_blocks=False):
 
 
 def get_downsampler(mode):
-    if mode == 'nearest':
+    if mode == "nearest":
         downsample_function = partial(ds_interpolate, order=0)
-    elif mode == 'mean':
+    elif mode == "mean":
         downsample_function = partial(ds_block_reduce, function=np.mean)
-    elif mode == 'max':
+    elif mode == "max":
         downsample_function = partial(ds_block_reduce, function=np.max)
-    elif mode == 'min':
+    elif mode == "min":
         downsample_function = partial(ds_block_reduce, function=np.min)
-    elif mode == 'interpolate':
+    elif mode == "sum":
+        downsample_function = partial(ds_block_reduce, function=np.sum)
+    elif mode == "interpolate":
         downsample_function = partial(ds_interpolate, order=3)
         warn("Downscaling with mode 'interpolate' may lead to different results depending on the chunk size")
+    elif callable(mode):
+        downsample_function = partial(ds_block_reduce, function=mode)
     else:
         raise ValueError("Downsampling mode %s is not supported" % mode)
     return downsample_function

@@ -230,8 +230,9 @@ def convert_to_bdv(input_path, input_key, output_path,
         downscale_factors (tuple or list): factors tused to create multi-scale pyramid.
             The factors need to be specified per dimension and are interpreted relative to the previous factor.
             If no argument is passed, pybdv does not create a multi-scale pyramid. (default: None)
-        downscale_mode (str): mode used for downscaling.
-            Can be 'mean', 'max', 'min', 'nearest' or 'interpolate' (default:'nerarest').
+        downscale_mode (str or callable): mode used for downscaling.
+            Can be 'mean', 'max', 'min', 'nearest', 'sum' or 'interpolate'.
+            Custom downscaling functions cann also be passed (default:'nerarest').
         resolution(list or tuple): resolution of the data
         unit (str): unit of measurement
         setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
@@ -378,8 +379,9 @@ def make_bdv(data, output_path,
         downscale_factors (tuple or list): factors tused to create multi-scale pyramid.
             The factors need to be specified per dimension and are interpreted relative to the previous factor.
             If no argument is passed, pybdv does not create a multi-scale pyramid. (default: None)
-        downscale_mode (str): mode used for downscaling.
-            Can be 'mean', 'max', 'min', 'nearest' or 'interpolate' (default:'nerarest').
+        downscale_mode (str or callable): mode used for downscaling.
+            Can be 'mean', 'max', 'min', 'nearest' or 'interpolate'.
+            Custom downscaling functions cann also be passed (default:'nerarest').
         resolution(list or tuple): resolution of the data
         unit (str): unit of measurement
         setup_id (int): id of this view set-up. By default, the next free id is chosen (default: None).
@@ -720,16 +722,18 @@ def make_bdv_from_dask_array(data, output_path,
         raise ValueError("Invalid input dimensionality")
     if affine is not None:
         validate_affine(affine)
-    # downsample options
-    downscale_dict = {'mean': np.mean, 'sum': np.sum}
+
+    # TODO nearest interpolation?!
+    # valid downsample options and map string options to corresponding functions
+    downscale_dict = {"mean": np.mean, "sum": np.sum, "min": np.min, "max": np.max}
     options = list(downscale_dict.keys())
     if isinstance(downscale_mode, str):
         if downscale_mode not in downscale_dict:
-            raise ValueError('downscale_mode "%s" not found in options %s' % (downscale_mode, options))
+            raise ValueError("downscale_mode '%s' not found in options %s" % (downscale_mode, options))
         else:
             downscale_mode = downscale_dict[downscale_mode]
     elif not callable(downscale_mode):
-        raise ValueError('downscale_mode %s not supprorted (need string %s or callable)' % (downscale_mode, options))
+        raise ValueError("downscale_mode %s not supprorted (need string %s or callable)" % (downscale_mode, options))
     is_h5 = False
     data_path, xml_path, is_n5 = normalize_output_path_dask(output_path)
     setup_id, overwrite_data, overwrite_metadata, skip = handle_setup_id(setup_id,
