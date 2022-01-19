@@ -342,7 +342,7 @@ class MakeBdvTestMixin(ABC):
 
     def test_dask_lazy(self):
         if self.is_dask:
-            data = np.random.rand(10,10,10).astype(np.uint16)
+            data = np.random.rand(10,10,10).astype(np.float32)
             array = self._make_bdv(data, self.out_path,  compute=False, return_stored=True )
             self.assertTrue('store-map' in array.name)
             key = get_key(self.is_h5, timepoint=0, setup_id=0, scale=0)
