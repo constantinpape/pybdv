@@ -318,16 +318,53 @@ class MakeBdvTestMixin(ABC):
     def test_overwrite_data(self):
         self._test_overwrite('data')
 
+    def test_dask_force_dtype(self):
+        if self.is_dask:
+            data = np.random.rand(100,100,100).astype(np.uint16)
+            self._make_bdv(data, self.out_path,  downscale_factors=[[2, 2, 2]], force_dtype=np.uint16  )
+            key = get_key(self.is_h5, timepoint=0, setup_id=0, scale=1)
+            self.assertTrue(os.path.exists(self.out_path))
+            with open_file(self.out_path, 'r') as f:
+                self.assertTrue(key in f)
+                ds = f[key]
+                self.assertEqual(ds.dtype, np.uint16)
+
+    def test_dask_force_dtype_none(self):
+        if self.is_dask:
+            data = np.random.rand(100,100,100).astype(np.uint16)
+            self._make_bdv(data, self.out_path,  downscale_factors=[[2, 2, 2]], force_dtype=None )
+            key = get_key(self.is_h5, timepoint=0, setup_id=0, scale=1)
+            self.assertTrue(os.path.exists(self.out_path))
+            with open_file(self.out_path, 'r') as f:
+                self.assertTrue(key in f)
+                ds = f[key]
+                self.assertEqual(ds.dtype, np.float64)
+
+    def test_dask_lazy(self):
+        if self.is_dask:
+            data = np.random.rand(10,10,10).astype(np.uint16)
+            array = self._make_bdv(data, self.out_path,  compute=False, return_stored=True )
+            self.assertTrue('store-map' in array.name)
+            key = get_key(self.is_h5, timepoint=0, setup_id=0, scale=0)
+            self.assertTrue(os.path.exists(self.out_path))
+            with open_file(self.out_path, 'r') as f:
+                self.assertTrue(key in f)
+                ds = f[key]
+                out_data = ds[:]
+                self.assertTrue(np.sum(out_data) == 0)
+                
 
 class TestMakeBdvH5(MakeBdvTestMixin, unittest.TestCase):
     out_path = './tmp/test.h5'
     is_h5 = True
+    is_dask = False
 
 
 @unittest.skipIf(n5_file is None, "Need zarr or z5py for n5 support")
 class TestMakeBdvN5(MakeBdvTestMixin, unittest.TestCase):
     out_path = './tmp/test.n5'
     is_h5 = False
+    is_dask = False
 
 
 @unittest.skipUnless(has_dask, "Need dask")
@@ -335,9 +372,10 @@ class TestMakeBdvDaskN5(MakeBdvTestMixin, unittest.TestCase):
     out_path = './tmp/test.n5'
     is_h5 = False
     supports_interpolation = False
+    is_dask = True
 
     def _make_bdv(self, data, *args, **kwargs):
-        make_bdv_from_dask_array(dask.array.from_array(data), *args, **kwargs)
+        return make_bdv_from_dask_array(dask.array.from_array(data), *args, **kwargs)
 
 
 @unittest.skipUnless(has_dask, "Need dask")
@@ -345,9 +383,10 @@ class TestMakeBdvDaskZarr(MakeBdvTestMixin, unittest.TestCase):
     out_path = './tmp/test.zarr'
     is_h5 = False
     supports_interpolation = False
+    is_dask = True
 
     def _make_bdv(self, data, *args, **kwargs):
-        make_bdv_from_dask_array(dask.array.from_array(data), *args, **kwargs)
+        return make_bdv_from_dask_array(dask.array.from_array(data), *args, **kwargs)
 
 
 if __name__ == '__main__':

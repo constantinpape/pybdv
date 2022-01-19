@@ -790,4 +790,4 @@ def make_bdv_from_dask_array(data, output_path,
                        overwrite_data=overwrite_data,
                        enforce_consistency=enforce_consistency)
     if return_stored:
-        return array
+        return array[0]
