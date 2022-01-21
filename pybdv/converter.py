@@ -603,7 +603,7 @@ def make_scales_dask(data, data_path, is_n5,
                 factors = [[1, 1, 1]] + factors
             else:
                 factors = [[1, 1, 1]]
-            return factors
+            return factors, None
         pyramid = {}
         pyramid[base_key] = data
         if downscale_factors is not None:
