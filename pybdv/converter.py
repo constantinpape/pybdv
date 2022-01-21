@@ -573,7 +573,8 @@ def initialize_bdv(output_path, shape, dtype, setup_id=0, timepoint=0,
 def make_scales_dask(data, data_path, is_n5,
                      downscale_factors, downscale_func,
                      ndim, setup_id, downsample_chunks=None,
-                     timepoint=0, overwrite=False):
+                     timepoint=0, overwrite=False, force_dtype=None,
+                     compute=True, return_stored=False):
     if downscale_factors is not None:
         if not all(isinstance(factor, (int, tuple, list)) for factor in downscale_factors):
             raise ValueError("Invalid downscale factor")
@@ -602,7 +603,7 @@ def make_scales_dask(data, data_path, is_n5,
                 factors = [[1, 1, 1]] + factors
             else:
                 factors = [[1, 1, 1]]
-            return factors
+            return factors, None
         pyramid = {}
         pyramid[base_key] = data
         if downscale_factors is not None:
@@ -612,7 +613,8 @@ def make_scales_dask(data, data_path, is_n5,
                 current_factor *= factor
                 factor_dict = {k: v for k, v in zip(range(ndim), current_factor)}
                 pyramid[key_] = da.coarsen(downscale_func, data, factor_dict, trim_excess=True).rechunk(chunks)
-
+                if force_dtype is not None: 
+                    pyramid[key_] = pyramid[key_].astype(force_dtype)
         if downsample_chunks:
             save_chunks_all = [data.chunksize] + list(downsample_chunks)
         else:
@@ -622,14 +624,14 @@ def make_scales_dask(data, data_path, is_n5,
             arrays.append(group.zeros(
                 name=k, shape=v.shape, dtype=v.dtype, chunks=save_chunks, compressor=GZip(), overwrite=overwrite
             ))
-        da.store(pyramid.values(), arrays, lock=None)
+        array = da.store(pyramid.values(), arrays, lock=None, compute=compute, return_stored=return_stored)
 
     # add first level to factors
     if downscale_factors is not None:
         factors = [[1, 1, 1]] + factors
     else:
         factors = [[1, 1, 1]]
-    return factors
+    return factors , array
 
 
 def normalize_output_path_dask(output_path):
@@ -668,7 +670,7 @@ def make_bdv_from_dask_array(data, output_path,
                              setup_id=None, timepoint=0, setup_name=None,
                              affine=None, attributes={'channel': {'id': None}},
                              overwrite='skip', chunks=None, downsample_chunks=None,
-                             n_threads=1):
+                             n_threads=1, force_dtype=None, compute=True, return_stored=False):
     """ Write data in BigDatViewer file format for one view setup and timepoint.
 
     Optionally downscale the input volume and write it to BigDataViewer scale pyramid.
@@ -711,6 +713,13 @@ def make_bdv_from_dask_array(data, output_path,
         downsample_chunks (list of tuples): same as chunks but for each downsample level.
             By deafult is set to (64,64,64)
         n_threads (int): dummy argument to be compatible with other function signatures (default: 1).
+        force_dtype: dtype or None
+            Convert to dtype even after downscaling, None --> no forced dtype
+        compute: boolean, optional (True)
+            If true compute immediately; return dask.delayed.Delayed otherwise.
+        return_stored: boolean, optional (False)
+            If true will return a dask array (with compute set to false will execute lazily)
+
     """
     # validate input arguments
     if not has_dask:
@@ -750,7 +759,8 @@ def make_bdv_from_dask_array(data, output_path,
     attributes_ = validate_attributes(xml_path, attributes, setup_id, enforce_consistency)
 
     # we need to convert the dtype only for the hdf5 based storage
-
+    if force_dtype is not None:
+        data = data.astype(force_dtype)
     # set proper chunks
     if chunks is not None:
         data = data.rechunk(chunks)
@@ -758,9 +768,11 @@ def make_bdv_from_dask_array(data, output_path,
     if downscale_factors is None:
         # set single level downscale factor
         factors = [[1, 1, 1]]
-    factors = make_scales_dask(data, data_path, is_n5, downscale_factors, downscale_mode,
+    factors, array = make_scales_dask(data, data_path, is_n5, downscale_factors, downscale_mode,
                                ndim, setup_id, downsample_chunks=downsample_chunks,
-                               timepoint=timepoint, overwrite=overwrite_data)
+                               timepoint=timepoint, overwrite=overwrite_data,
+                               compute=compute, force_dtype=force_dtype, 
+                               return_stored=return_stored)
 
     # write the format specific metadata in the output container
     write_n5_metadata(data_path, factors, resolution, setup_id, timepoint,
@@ -777,3 +789,5 @@ def make_bdv_from_dask_array(data, output_path,
                        overwrite=overwrite_metadata,
                        overwrite_data=overwrite_data,
                        enforce_consistency=enforce_consistency)
+    if return_stored:
+        return array[0]
