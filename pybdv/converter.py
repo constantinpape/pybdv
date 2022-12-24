@@ -185,7 +185,7 @@ def make_scales(data_path, downscale_factors, downscale_mode,
                 chunks=None, n_threads=1, timepoint=0, overwrite=False):
     ds_modes = ('nearest', 'mean', 'max', 'min', 'interpolate')
     if downscale_mode not in ds_modes:
-        raise ValueError("Invalid downscale mode %s, choose one of %s" % downscale_mode, str(ds_modes))
+        raise ValueError(f"Invalid downscale mode {downscale_mode}, choose one of {ds_modes}")
     if not all(isinstance(factor, (int, tuple, list)) for factor in downscale_factors):
         raise ValueError("Invalid downscale factor")
     if not all(len(factor) == 3 for factor in downscale_factors
@@ -613,7 +613,7 @@ def make_scales_dask(data, data_path, is_n5,
                 current_factor *= factor
                 factor_dict = {k: v for k, v in zip(range(ndim), current_factor)}
                 pyramid[key_] = da.coarsen(downscale_func, data, factor_dict, trim_excess=True).rechunk(chunks)
-                if force_dtype is not None: 
+                if force_dtype is not None:
                     pyramid[key_] = pyramid[key_].astype(force_dtype)
         if downsample_chunks:
             save_chunks_all = [data.chunksize] + list(downsample_chunks)
@@ -631,7 +631,7 @@ def make_scales_dask(data, data_path, is_n5,
         factors = [[1, 1, 1]] + factors
     else:
         factors = [[1, 1, 1]]
-    return factors , array
+    return factors, array
 
 
 def normalize_output_path_dask(output_path):
@@ -769,10 +769,10 @@ def make_bdv_from_dask_array(data, output_path,
         # set single level downscale factor
         factors = [[1, 1, 1]]
     factors, array = make_scales_dask(data, data_path, is_n5, downscale_factors, downscale_mode,
-                               ndim, setup_id, downsample_chunks=downsample_chunks,
-                               timepoint=timepoint, overwrite=overwrite_data,
-                               compute=compute, force_dtype=force_dtype, 
-                               return_stored=return_stored)
+                                      ndim, setup_id, downsample_chunks=downsample_chunks,
+                                      timepoint=timepoint, overwrite=overwrite_data,
+                                      compute=compute, force_dtype=force_dtype,
+                                      return_stored=return_stored)
 
     # write the format specific metadata in the output container
     write_n5_metadata(data_path, factors, resolution, setup_id, timepoint,
