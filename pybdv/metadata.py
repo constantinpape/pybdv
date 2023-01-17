@@ -334,7 +334,6 @@ def write_h5_metadata(path, scale_factors, setup_id=0, timepoint=0, overwrite=Fa
         if write_dtype:
             g = f["s%02i" % setup_id]
             data_key = "t%05i/s%02i/0/cells" % (setup_id, timepoint)
-            breakpoint()
             dtype = f[data_key].dtype
             g.attrs["dataType"] = str(dtype)
 
