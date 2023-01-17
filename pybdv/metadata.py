@@ -56,7 +56,7 @@ def _require_view_setup(viewsets, setup_id, setup_name,
     def _check_setup(vs):
         # check the name and size
         if vs.find('name').text != setup_name:
-            raise ValueError("Incompatible setup name")
+            raise ValueError(f"Incompatible setup name, got {setup_name}, expect {vs.find('name').text}")
         shape_exp = vs.find('size').text.split()
         shape_exp = tuple(int(shp) for shp in shape_exp)
         if shape_exp != (nx, ny, nz):
@@ -283,7 +283,7 @@ def _write_xml_metadata(xml_path, data_path, unit, resolution,
     tree.write(xml_path)
 
 
-def write_h5_metadata(path, scale_factors, setup_id=0, timepoint=0, overwrite=False):
+def write_h5_metadata(path, scale_factors, setup_id=0, timepoint=0, overwrite=False, write_dtype=False):
     effective_scale = [1, 1, 1]
 
     # scale factors and chunks
@@ -330,6 +330,13 @@ def write_h5_metadata(path, scale_factors, setup_id=0, timepoint=0, overwrite=Fa
 
         key_chunks = 's%02i/subdivisions' % setup_id
         _write_mdata(key_chunks, chunks)
+
+        if write_dtype:
+            g = f["s%02i" % setup_id]
+            data_key = "t%05i/s%02i/0/cells" % (setup_id, timepoint)
+            breakpoint()
+            dtype = f[data_key].dtype
+            g.attrs["dataType"] = str(dtype)
 
 
 # n5 metadata format is specified here:
