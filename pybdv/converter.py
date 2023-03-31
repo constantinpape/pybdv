@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 from .util import (blocking, open_file, get_key,
                    HDF5_EXTENSIONS, N5_EXTENSIONS, XML_EXTENSIONS, ZARR_EXTENSIONS)
-from .metadata import (get_setup_ids, get_timeponts,
+from .metadata import (get_setup_ids, get_timepoints,
                        validate_affine, validate_attributes,
                        write_h5_metadata, write_xml_metadata, write_n5_metadata)
 from .downsample import downsample, sample_shape
@@ -33,7 +33,7 @@ def handle_setup_id(setup_id, xml_path, timepoint, overwrite, is_h5):
             setup_id = max(setup_ids) + 1
             timepoints = []
         else:
-            timepoints = get_timeponts(xml_path, setup_id)
+            timepoints = get_timepoints(xml_path, setup_id)
     else:
         setup_ids = []
         timepoints = []
@@ -526,7 +526,7 @@ def initialize_bdv(output_path, shape, dtype, setup_id=0, timepoint=0,
     # make sure the setup_id / timepoint combination does not exist yet
     if os.path.exists(xml_path):
         have_setup_id = setup_id in get_setup_ids(xml_path)
-        if have_setup_id and timepoint in get_timeponts(xml_path, setup_id):
+        if have_setup_id and timepoint in get_timepoints(xml_path, setup_id):
             raise RuntimeError(f"Setup {setup_id} and timepoint {timepoint} already exist in {output_path}.")
 
     with open_file(data_path, mode="a") as f:
