@@ -737,7 +737,7 @@ def get_setup_ids(xml_path):
     return ids
 
 
-def get_timeponts(xml_path, setup_id):
+def get_timepoints(xml_path, setup_id):
     """ Get timepoints for a given setup id.
 
     Arguments:
