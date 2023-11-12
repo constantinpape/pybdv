@@ -1,4 +1,5 @@
 import os
+import json
 import numpy as np
 import xml.etree.ElementTree as ET
 from numbers import Number
@@ -334,7 +335,7 @@ def write_h5_metadata(path, scale_factors, setup_id=0, timepoint=0, overwrite=Fa
 
 # n5 metadata format is specified here:
 # https://github.com/bigdataviewer/bigdataviewer-core/blob/master/BDV%20N5%20format.md
-def write_n5_metadata(path, scale_factors, resolution, setup_id=0, timepoint=0, overwrite=False):
+def write_n5_metadata(path, scale_factors="None", resolution=[10,10,10], setup_id=0, timepoint=0, overwrite=False):
 
     def _write_mdata(g, key, data):
         if key in g.attrs and overwrite:
@@ -344,11 +345,17 @@ def write_n5_metadata(path, scale_factors, resolution, setup_id=0, timepoint=0, 
         else:
             g.attrs[key] = data
 
-    # build the effective scale factors
-    effective_scales = [scale_factors[0]]
-    for factor in scale_factors[1:]:
-        effective_scales.append([eff * fac
-                                 for eff, fac in zip(effective_scales[-1], factor[::-1])])
+    if not scale_factors == "None":
+        # build the effective scale factors
+        effective_scales = [scale_factors[0]]
+        for factor in scale_factors[1:]:
+            effective_scales.append([eff * fac
+                                     for eff, fac in zip(effective_scales[-1], factor[::-1])])
+    else:
+        with open(os.path.join(path, 'setup0', 'timepoint0', 'attributes.json')) as f:
+            t0_attribs = json.load(f)
+
+        effective_scales = t0_attribs['scales']
 
     with open_file(path, 'a') as f:
         key = get_key(False, timepoint=timepoint, setup_id=setup_id, scale=0)
