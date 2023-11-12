@@ -213,7 +213,7 @@ def convert_to_bdv(input_path, input_key, output_path,
                    resolution=[1., 1., 1.], unit='pixel',
                    setup_id=None, timepoint=0,
                    setup_name=None, affine=None, attributes={'channel': {'id': None}},
-                   overwrite='skip', convert_dtype=None, chunks=None, n_threads=1):
+                   overwrite='skip', convert_dtype=False, chunks=None, n_threads=1):
     """ Convert hdf5 volume to BigDatViewer format.
 
     Optionally downscale the input volume and write it to BigDataViewer scale pyramid.
@@ -254,7 +254,7 @@ def convert_to_bdv(input_path, input_key, output_path,
             - 'all': over-write both data and metadta
             (default: 'skip')
         convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
-            This will map unsigned types to signed and fail if the value range is too large. (default: None)
+            This will map unsigned types to signed and fail if the value range is too large. (default: False)
         chunks (tuple): chunks for the output dataset.
             By default the h5py auto chunks are used (default: None)
         n_threads (int): number of chunks used for copying and downscaling (default: 1)
@@ -317,7 +317,7 @@ def convert_to_bdv(input_path, input_key, output_path,
     # write the format specific metadata in the output container
     if is_h5:
         write_h5_metadata(data_path, factors, setup_id, timepoint,
-                          overwrite=overwrite_data)
+                          overwrite=overwrite_data, write_dtype=not convert_dtype)
     else:
         write_n5_metadata(data_path, factors, resolution, setup_id, timepoint,
                           overwrite=overwrite_data)
@@ -363,7 +363,7 @@ def make_bdv(data, output_path,
              resolution=[1., 1., 1.], unit='pixel',
              setup_id=None, timepoint=0, setup_name=None,
              affine=None, attributes={'channel': {'id': None}},
-             overwrite='skip', convert_dtype=None, chunks=None, n_threads=1):
+             overwrite='skip', convert_dtype=False, chunks=None, n_threads=1):
     """ Write data in BigDatViewer file format for one view setup and timepoint.
 
     Optionally downscale the input volume and write it to BigDataViewer scale pyramid.
@@ -403,7 +403,7 @@ def make_bdv(data, output_path,
             - 'all': over-write both data and metadta
             (default: 'skip')
         convert_dtype (bool): convert the datatype to value range that is compatible with BigDataViewer.
-            This will map unsigned types to signed and fail if the value range is too large. (default: None)
+            This will map unsigned types to signed and fail if the value range is too large. (default: False)
         chunks (tuple): chunks for the output dataset.
             By default the h5py auto chunks are used (default: None)
         n_threads (int): number of chunks used for writing and downscaling (default: 1)
@@ -463,7 +463,7 @@ def make_bdv(data, output_path,
     # write the format specific metadata in the output container
     if is_h5:
         write_h5_metadata(data_path, factors, setup_id, timepoint,
-                          overwrite=overwrite_data)
+                          overwrite=overwrite_data, write_dtype=not convert_dtype)
     else:
         write_n5_metadata(data_path, factors, resolution, setup_id, timepoint,
                           overwrite=overwrite_data)
