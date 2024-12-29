@@ -9,6 +9,13 @@ import numpy as np
 INP_PATH = os.path.join(os.path.split(__file__)[0], "../data/example.tif")
 EXP_PATH = os.path.join(os.path.split(__file__)[0], "../data/example.h5")
 
+CAN_READ_EXP = True
+try:
+    with h5py.File(EXP_PATH, "r") as f:
+        f["t00000/s00/0/cells"][:]
+except Exception:
+    CAN_READ_EXP = False
+
 
 # Dummy test data, needs to be converted to bdv/xml with FIJI externally.
 def make_test_data():
@@ -34,7 +41,7 @@ class TestExternal(unittest.TestCase):
         except OSError:
             pass
 
-    @unittest.skipUnless(os.path.exists(INP_PATH), "Needs pre-computed test data")
+    @unittest.skipUnless(CAN_READ_EXP, "Needs pre-computed test data.")
     def test_external(self):
         from pybdv import make_bdv
 
