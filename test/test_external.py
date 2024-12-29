@@ -40,7 +40,7 @@ class TestExternal(unittest.TestCase):
 
         d = imageio.imread(INP_PATH)
         res_path = os.path.join(self.tmp_folder, "data.h5")
-        make_bdv(d, res_path, convert_dtype=True)
+        make_bdv(d, res_path, convert_dtype=False)
 
         with h5py.File(EXP_PATH, "r") as f:
             ds = f["t00000/s00/0/cells"]
