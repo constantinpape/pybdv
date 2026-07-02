@@ -10,16 +10,14 @@ Python tools for [BigDataViewer](https://imagej.net/BigDataViewer).
 
 `pybdv` is availabe on `PyPI` and on `conda-forge`. Hence, you can install it via `pip`:
 ```bash
-pip install pybdva
+pip install pybdv
 ```
-ot via `conda`:
+or via `conda`:
 ```bash
-
 conda install -c conda-forge pybdv
 ```
 
 Alternatively, you can install it from source by downloading it from git and then installing `pybdv` locally:
-
 ```bash
 git clone https://github.com/constantinpape/pybdv
 cd pybdv
