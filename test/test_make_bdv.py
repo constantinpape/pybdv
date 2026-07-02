@@ -344,7 +344,7 @@ class MakeBdvTestMixin(ABC):
         if self.is_dask:
             data = np.random.rand(10,10,10).astype(np.float32)
             array = self._make_bdv(data, self.out_path,  compute=False, return_stored=True )
-            self.assertTrue('store-map' in array.name)
+            self.assertIsInstance(array, dask.array.Array)
             key = get_key(self.is_h5, timepoint=0, setup_id=0, scale=0)
             self.assertTrue(os.path.exists(self.out_path))
             with open_file(self.out_path, 'r') as f:

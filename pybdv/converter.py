@@ -16,8 +16,6 @@ OVERWRITE_OPTIONS = ('skip', 'data', 'metadata', 'all')
 
 try:
     import dask.array as da
-    import zarr
-    from numcodecs import GZip
     has_dask = True
 except ImportError:
     has_dask = False
@@ -589,11 +587,7 @@ def make_scales_dask(data, data_path, is_n5,
     elif downscale_factors is not None:
         downsample_chunks = tuple(((64, 64, 64) for _ in range(len(downscale_factors))))
 
-    if is_n5:
-        store = zarr.N5FSStore(data_path, overwrite=overwrite)
-    else:
-        store = zarr.DirectoryStore(data_path)
-    with zarr.open(store, mode='a') as group:
+    with open_file(data_path, mode='a') as group:
         # run all downsample steps for better data locality with dask
         base_key = get_key(is_h5=False, timepoint=timepoint, setup_id=setup_id, scale=0)
         have_data = base_key in group
@@ -621,8 +615,11 @@ def make_scales_dask(data, data_path, is_n5,
             save_chunks_all = [data.chunksize]
         arrays = []
         for (k, v), save_chunks in zip(pyramid.items(), save_chunks_all):
-            arrays.append(group.zeros(
-                name=k, shape=v.shape, dtype=v.dtype, chunks=save_chunks, compressor=GZip(), overwrite=overwrite
+            # deleting is required to over-write, because the shape may change
+            if k in group and overwrite:
+                del group[k]
+            arrays.append(group.create_dataset(
+                k, shape=v.shape, dtype=v.dtype, chunks=tuple(save_chunks), compression='gzip'
             ))
         array = da.store(pyramid.values(), arrays, lock=None, compute=compute, return_stored=return_stored)
 

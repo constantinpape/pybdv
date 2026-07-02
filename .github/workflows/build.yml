@@ -24,7 +24,7 @@ jobs:
           activate-environment: pybdv-build-env
           auto-update-conda: true
           channels: conda-forge
-          environment-file: .github/workflows/environment.yaml
+          environment-file: .github/environment.yaml
           python-version: ${{ matrix.python-version }}
           auto-activate-base: false
         env:
@@ -33,7 +33,7 @@ jobs:
       - name: Install pybdv
         if: matrix.os == 'ubuntu-latest'
         shell: bash -l {0}
-        run: pip install -e .[dask]
+        run: python -m pip install -e .[dask]
       
       - name: Run tests
         shell: bash -l {0}

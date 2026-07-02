@@ -2,10 +2,9 @@ name: pybdv-build-env
 channels:
   - conda-forge
 dependencies:
+  - pip
   - imageio
   - h5py
   - scikit-image
   - tqdm
   - z5py
-  # zarr doesn't work yet, because it doesn't allow writing 'dataType' as group attribute
-  # - zarr
