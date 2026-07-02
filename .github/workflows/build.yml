@@ -24,7 +24,7 @@ jobs:
           activate-environment: pybdv-build-env
           auto-update-conda: true
           channels: conda-forge
-          environment-file: .github/workflows/environment.yaml
+          environment-file: .github/environment.yaml
           python-version: ${{ matrix.python-version }}
           auto-activate-base: false
         env:
