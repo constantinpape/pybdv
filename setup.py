@@ -8,10 +8,11 @@ requires = [
     "numpy",
     "h5py",
     "scikit-image",
-    "tqdm"
+    "tqdm",
+    "z5py"
 ]
 
-extras = {"elf": ["elf"], "dask": ["dask", "zarr"]}
+extras = {"elf": ["elf"], "dask": ["dask"]}
 extras["all"] = list(itertools.chain.from_iterable(extras.values()))
 
 setup(

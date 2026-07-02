@@ -19,30 +19,21 @@ ZARR_EXTENSIONS = ['.zarr']
 if open_file is None:
     import h5py
 
+    # n5 and zarr files are always opened with z5py;
+    # zarr >= 3 has dropped support for the n5 format
     try:
         import z5py
         n5_file = z5py.File
     except ImportError:
         n5_file = None
 
-    if n5_file is None:
-        try:
-            import zarr
-            n5_file = zarr.open
-        except ImportError:
-            n5_file = None
-
     def open_file(path, mode='r'):
         ext = os.path.splitext(path)[1].lower()
         if ext in HDF5_EXTENSIONS:
             return h5py.File(path, mode=mode)
-        elif ext in N5_EXTENSIONS:
+        elif ext in N5_EXTENSIONS + ZARR_EXTENSIONS:
             if n5_file is None:
-                raise ValueError("Need zarr or z5py to open n5 files")
-            return n5_file(path, mode=mode)
-        elif ext in ZARR_EXTENSIONS:
-            if n5_file is None:
-                raise ValueError("Need zarr or z5py to open zarr files")
+                raise ValueError("Need z5py to open n5 or zarr files")
             return n5_file(path, mode=mode)
         else:
             raise ValueError(f"Invalid extension: {ext}")

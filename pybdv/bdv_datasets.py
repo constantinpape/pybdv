@@ -97,7 +97,7 @@ def _scale_and_add_to_dataset(
     scale_factors = scales[1: 2].tolist()
 
     for scale in scales[2:]:
-        scale_factors.append((scale / np.product(scale_factors, axis=0)).astype(int).tolist())
+        scale_factors.append((scale / np.prod(scale_factors, axis=0)).astype(int).tolist())
 
     # Scale the data
     downscaled_vols = [target_vol]
