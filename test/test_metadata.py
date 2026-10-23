@@ -83,6 +83,31 @@ class MetadataTestMixin(ABC):
         with self.assertRaises(ValueError):
             validate_attributes(self.xml_path2, attrs5, 1, True)
 
+    def test_get_time_range(self):
+        import xml.etree.ElementTree as ET
+        from pybdv.metadata import get_time_range
+        self.assertEqual(get_time_range(self.xml_path), (0, 0))
+
+        # bigdataviewer also writes timepoints as a list or as an integer pattern
+        tree = ET.parse(self.xml_path)
+        tpoints = tree.getroot().find('SequenceDescription').find('Timepoints')
+        for elem in list(tpoints):
+            tpoints.remove(elem)
+        tpoints.set('type', 'list')
+        for tp in (3, 1, 7):
+            ET.SubElement(ET.SubElement(tpoints, 'Timepoint'), 'id').text = str(tp)
+        tree.write(self.xml_path)
+        self.assertEqual(get_time_range(self.xml_path), (1, 7))
+
+        for pattern, expected in (('18', (18, 18)), ('2-10:4', (2, 10)),
+                                  ('5, 0-3', (0, 5)), ('9-4', (4, 9))):
+            for elem in list(tpoints):
+                tpoints.remove(elem)
+            tpoints.set('type', 'pattern')
+            ET.SubElement(tpoints, 'integerpattern').text = pattern
+            tree.write(self.xml_path)
+            self.assertEqual(get_time_range(self.xml_path), expected)
+
     def test_get_name(self):
         from pybdv.metadata import get_name
         name = get_name(self.xml_path, setup_id=0)

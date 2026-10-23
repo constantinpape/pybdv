@@ -764,9 +764,35 @@ def get_time_range(xml_path):
     root = ET.parse(xml_path).getroot()
     seqdesc = root.find('SequenceDescription')
     tpoints = seqdesc.find('Timepoints')
-    first = int(tpoints.find('first').text)
-    last = int(tpoints.find('last').text)
-    return first, last
+    tp_type = tpoints.attrib.get('type', 'range')
+    if tp_type == 'list':
+        timepoints = [int(tp.find('id').text) for tp in tpoints.findall('Timepoint')]
+    elif tp_type == 'pattern':
+        timepoints = _parse_integer_pattern(tpoints.find('integerpattern').text)
+    else:
+        return int(tpoints.find('first').text), int(tpoints.find('last').text)
+    return min(timepoints), max(timepoints)
+
+
+def _parse_integer_pattern(pattern):
+    """ Parse a bdv integer pattern like "0-10:2, 15", see
+    https://github.com/bigdataviewer/spimdata/blob/master/src/main/java/mpicbg/spim/data/sequence/IntegerPattern.java
+    """
+    if pattern is None or not pattern.strip():
+        return [0]
+    values = []
+    for entry in pattern.replace(' ', '').split(','):
+        if '-' in entry:
+            start, end = entry.split('-', 1)
+            end, step = end.split(':', 1) if ':' in end else (end, 1)
+            start, end, step = int(start), int(end), int(step)
+            if end > start:
+                values.extend(range(start, end + 1, step))
+            else:
+                values.extend(range(start, end - 1, -step))
+        else:
+            values.append(int(entry))
+    return values
 
 
 def get_bdv_format(xml_path):
