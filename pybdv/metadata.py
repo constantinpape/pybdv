@@ -613,7 +613,7 @@ def _write_transformation(vregs, setup_id, timepoint, affine, resolution, overwr
                 ET.SubElement(vt, 'affine').text = ' '.join(map(str, affs))
                 # NOTE for CP: truncating the number of digits here is not a good idea
                 # ET.SubElement(vt, 'affine').text = ' '.join(['{:.4f}'.format(aff) for aff in affs])
-                ET.SubElement(vt, 'name').text = name
+                ET.SubElement(vt, 'Name').text = name
         else:
             if affine is None:
                 dz, dy, dx = resolution
@@ -703,7 +703,10 @@ def get_affine(xml_path, setup_id, timepoint=0):
         ii = 0
         affine = {}
         for vt in vreg.findall('ViewTransform'):
-            name = vt.find('name')
+            # the bdv tag is 'Name'; older pybdv versions wrote 'name'
+            name = vt.find('Name')
+            if name is None:
+                name = vt.find('name')
             if name is None:
                 name = 'affine%i' % ii
             else:

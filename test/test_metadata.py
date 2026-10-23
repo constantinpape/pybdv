@@ -83,6 +83,30 @@ class MetadataTestMixin(ABC):
         with self.assertRaises(ValueError):
             validate_attributes(self.xml_path2, attrs5, 1, True)
 
+    def test_affine_names(self):
+        import xml.etree.ElementTree as ET
+        from pybdv.metadata import get_affine, write_affine
+        affine = {'calibration': [1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 2., 0.],
+                  'translation': [1., 0., 0., 3., 0., 1., 0., 4., 0., 0., 1., 5.]}
+        write_affine(self.xml_path, setup_id=0, affine=affine, overwrite=True)
+        self.assertEqual(get_affine(self.xml_path, setup_id=0), affine)
+        # transformation names use the tag 'Name' that bigdataviewer reads
+        root = ET.parse(self.xml_path).getroot()
+        names = [vt.find('Name').text for vt in root.iter('ViewTransform')
+                 if vt.find('Name') is not None]
+        self.assertEqual(names, ['calibration', 'translation'])
+
+        # read the names of transformations written by bigdataviewer / BigStitcher
+        vreg = root.find('ViewRegistrations').find('ViewRegistration')
+        for vt in vreg.findall('ViewTransform'):
+            vreg.remove(vt)
+        vt = ET.SubElement(vreg, 'ViewTransform', type='affine')
+        ET.SubElement(vt, 'Name').text = 'Stitching Transform'
+        ET.SubElement(vt, 'affine').text = ' '.join(map(str, affine['translation']))
+        ET.ElementTree(root).write(self.xml_path)
+        self.assertEqual(get_affine(self.xml_path, setup_id=0),
+                         {'Stitching Transform': affine['translation']})
+
     def test_get_name(self):
         from pybdv.metadata import get_name
         name = get_name(self.xml_path, setup_id=0)
